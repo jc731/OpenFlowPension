@@ -9,6 +9,7 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.employment import EmploymentRecord
+    from app.models.payroll import PayrollReport
 
 
 class Employer(TimestampMixin, Base):
@@ -20,3 +21,4 @@ class Employer(TimestampMixin, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     employment_records: Mapped[list[EmploymentRecord]] = relationship(back_populates="employer")
+    payroll_reports: Mapped[list[PayrollReport]] = relationship(back_populates="employer")

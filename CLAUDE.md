@@ -148,6 +148,47 @@ Five tables handle payment generation and deductions:
 
 `net_amount = gross_amount − Σ(payment_deductions.amount)`. Stored on the payment for audit and read performance — not recomputed on every read.
 
+### Payroll ingestion
+
+Employers submit payroll data via two intake paths that share the same processing engine:
+
+- `POST /api/v1/employers/{id}/payroll-reports` — JSON batch (body: `PayrollReportCreate` with a `rows` array)
+- `POST /api/v1/employers/{id}/payroll-reports/upload` — CSV file upload (`UploadFile`); CSV is parsed by `payroll_service.parse_csv` and fed into the same engine
+
+**CSV format** — required columns (header row must be present):
+`member_number, period_start, period_end, gross_earnings, employee_contribution, employer_contribution, days_worked`
+
+**Processing** (`app/services/payroll_service.py`):
+Each row goes through `_process_row`, which:
+1. Resolves `member_number` → `Member.id`
+2. Finds the active `EmploymentRecord` for that member at this employer
+3. Checks for duplicate: existing non-voided `ContributionRecord` with same member + employment + period → marks `skipped`
+4. Looks up `service_credit_accrual_rule` config as of `period_end` (raises error if missing)
+5. Computes service credit years via `compute_service_credit_years` (rule-specific: `monthly_floor` or `proportional_percent_time`)
+6. Writes a `ServiceCreditEntry` (links to the config row for audit trail)
+7. Writes a `ContributionRecord` (append-only C&I ledger)
+
+Processing is **partial-success**: each row is independently applied or error'd. The report always completes; `error_count` and `skipped_count` tell the caller what happened. Async/Celery processing of large files is deferred — see backlog.
+
+**Three payroll tables:**
+- `payroll_reports` — one per upload/batch; tracks source format, row counts, status (pending → processing → completed)
+- `payroll_report_rows` — one per input row; stores raw_data JSONB verbatim for audit; resolved `member_id`/`employment_id` written back after lookup
+- `contribution_records` — append-only C&I ledger; `voided_at`/`voided_by`/`void_reason` for corrections; links back to `payroll_report_rows` when posted via payroll ingestion; can also be inserted manually (payroll_report_row_id nullable)
+
+`contribution_records` uses the same immutability pattern as `service_credit_entries`: never UPDATE or DELETE. Post a correcting entry + void the original.
+
+### Contract and status management (backlog — not yet implemented)
+
+A future module for employment lifecycle changes: new hire onboarding, termination processing, leave of absence, percent-time changes, reemployment after retirement. These are write paths that will feed `employment_records`, `salary_history`, and `service_credit_entries` but require policy rules (notice periods, eligibility re-checks) that don't belong in the current thin CRUD routers.
+
+### Async payroll processing (backlog — not yet implemented)
+
+For large files (>1,000 rows), payroll ingestion should be offloaded to a Celery task. Pattern: route creates a `PayrollReport` with `status=pending`, enqueues a Celery task with `report_id`, returns 202 Accepted immediately. Celery task fetches the report, processes rows, updates counts, sets `status=completed`. Use Redis as the Celery broker (already in docker-compose). Implement when employers are submitting production volumes.
+
+### Contribution interest crediting (backlog — not yet implemented)
+
+`contribution_records` accumulates the raw employee + employer contributions. Interest crediting (C&I accumulation for Money Purchase calculation) is a separate periodic process that will read `contribution_records`, apply rate tables stored in `system_configurations`, and write interest entries back. The exact crediting frequency and compounding rules differ by fund. Defer until Money Purchase is in active use.
+
 ### Tax withholding calculation engine (backlog — not yet implemented)
 
 `POST /api/v1/calculate/tax-withholding` — stateless endpoint. Takes gross amount + W-4 election + tax year → returns computed federal and state withholding amounts. Tax brackets stored in `system_configurations` with keys like `federal_tax_brackets_2025` (JSONB), versioned by effective date — same config service pattern used everywhere else. Historic bracket lookup for prior-year payment review is supported by the config pattern but low priority. Implement before automating payroll runs.

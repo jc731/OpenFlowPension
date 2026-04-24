@@ -17,6 +17,9 @@ import app.models.employment   # noqa: F401
 import app.models.salary       # noqa: F401
 import app.models.leave        # noqa: F401
 import app.models.service_credit  # noqa: F401
+import app.models.bank_account    # noqa: F401
+import app.models.payment         # noqa: F401
+import app.models.payroll         # noqa: F401
 
 TEST_DATABASE_URL = settings.database_url.replace("/openflow_pension", "/openflow_pension_test")
 
