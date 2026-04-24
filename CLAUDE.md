@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Data model, benefit calculation engine, and payment disbursement are the current focus. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, and payroll ingestion are built. Auth, frontend, and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -86,6 +86,7 @@ All routers depend on `get_current_user()` from `app/api/deps.py`. It returns a 
 | `member:write` | Create/update members |
 | `employment:write` | Post employment and salary changes |
 | `service_credit:write` | Post service credit (payroll integrations) |
+| `payroll:write` | Submit payroll reports (JSON batch or CSV upload) |
 | `benefit:calculate` | Call the stateless calculation endpoint |
 | `admin` | Everything |
 
