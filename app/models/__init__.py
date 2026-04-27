@@ -11,6 +11,8 @@ from app.models.service_credit import ServiceCreditEntry
 from app.models.bank_account import MemberBankAccount
 from app.models.payment import BenefitPayment, PaymentDeduction, DeductionOrder, TaxWithholdingElection
 from app.models.payroll import PayrollReport, PayrollReportRow, ContributionRecord
+from app.models.member_status import MemberStatusHistory
+from app.models.leave_period import LeavePeriod
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -26,4 +28,6 @@ __all__ = [
     "MemberBankAccount",
     "BenefitPayment", "PaymentDeduction", "DeductionOrder", "TaxWithholdingElection",
     "PayrollReport", "PayrollReportRow", "ContributionRecord",
+    "MemberStatusHistory",
+    "LeavePeriod",
 ]

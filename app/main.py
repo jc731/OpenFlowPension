@@ -8,6 +8,7 @@ from app.api.v1.routers.employment import router as employment_router
 from app.api.v1.routers.members import router as members_router
 from app.api.v1.routers.payments import router as payments_router
 from app.api.v1.routers.payroll import router as payroll_router
+from app.api.v1.routers.contracts import router as contracts_router
 
 app = FastAPI(
     title="OpenFlow Pension API",
@@ -22,6 +23,7 @@ app.include_router(benefit_router, prefix="/api/v1")
 app.include_router(bank_accounts_router, prefix="/api/v1")
 app.include_router(payments_router, prefix="/api/v1")
 app.include_router(payroll_router, prefix="/api/v1")
+app.include_router(contracts_router, prefix="/api/v1")
 
 
 @app.get("/health")

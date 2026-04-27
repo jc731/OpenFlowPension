@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.models.beneficiary import Beneficiary
     from app.models.contact import MemberContact
     from app.models.employment import EmploymentRecord
+    from app.models.member_status import MemberStatusHistory
     from app.models.payment import BenefitPayment, DeductionOrder, TaxWithholdingElection
     from app.models.plan_config import PlanTier, PlanType
     from app.models.service_credit import ServiceCreditEntry
@@ -60,3 +61,4 @@ class Member(TimestampMixin, Base):
     payments: Mapped[list[BenefitPayment]] = relationship(back_populates="member")
     deduction_orders: Mapped[list[DeductionOrder]] = relationship(back_populates="member")
     tax_withholding_elections: Mapped[list[TaxWithholdingElection]] = relationship(back_populates="member")
+    status_history: Mapped[list[MemberStatusHistory]] = relationship(back_populates="member", order_by="MemberStatusHistory.effective_date")

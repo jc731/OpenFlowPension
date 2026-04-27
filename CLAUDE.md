@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, and payroll ingestion are built. Auth, frontend, and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, and contract/status management are built. Auth, frontend, and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -178,9 +178,40 @@ Processing is **partial-success**: each row is independently applied or error'd.
 
 `contribution_records` uses the same immutability pattern as `service_credit_entries`: never UPDATE or DELETE. Post a correcting entry + void the original.
 
-### Contract and status management (backlog — not yet implemented)
+### Contract and status management
 
-A future module for employment lifecycle changes: new hire onboarding, termination processing, leave of absence, percent-time changes, reemployment after retirement. These are write paths that will feed `employment_records`, `salary_history`, and `service_credit_entries` but require policy rules (notice periods, eligibility re-checks) that don't belong in the current thin CRUD routers.
+Two responsibilities handled by `app/services/contract_service.py`:
+
+**Contract events** — validated write paths for the employment lifecycle:
+- `new_hire` → creates `EmploymentRecord` + initial `SalaryHistory` row; validates `employment_type` against `system_configurations` key `employment_types` (hard 400 if invalid)
+- `terminate` → sets `termination_date` on `EmploymentRecord`; only writes `terminated` status if no other active employment remains (concurrent employment support)
+- `begin_leave` / `end_leave` → creates/closes a `LeavePeriod` row; validates `leave_type` against `system_configurations` key `leave_types`
+- `change_percent_time` → updates `EmploymentRecord.percent_time`; creates a `SalaryHistory` row if new salary provided
+
+**Explicit status transitions** (admin actions, not auto-derived):
+- `begin_annuity` → writes `annuitant` (call after first benefit payment is set up)
+- `process_refund` → writes `inactive` (call after refund payment is processed)
+- `record_death` → writes `deceased`; all subsequent contract writes are blocked
+
+**Status storage**: `member_status_history` is an append-only table. Every event writes a new row. `Member.member_status` (denormalized) is kept in sync for fast reads. `get_current_status` reads the latest history row.
+
+**Valid statuses**: `active | on_leave | terminated | inactive | annuitant | deceased`
+
+**Transition rules** (violations raise `ValueError` → 422):
+- `new_hire` from: `active` (concurrent), `terminated`, `inactive`, `None`
+- `terminate` from: `active`, `on_leave`
+- `begin_leave` from: `active`
+- `end_leave` from: `on_leave`
+- `begin_annuity` from: `active`, `terminated`, `inactive`
+- `process_refund` from: `terminated`
+- `record_death` from: any
+- `deceased` blocks all further contract writes
+
+**Configurable lookup tables** (must be seeded in `system_configurations`):
+- `employment_types` — `{"types": ["general_staff", "academic", "police_fire", "other"]}`
+- `leave_types` — `{"types": ["medical", "personal", "military", "family", "other"]}`
+
+Both use the standard `get_config(key, as_of, session)` pattern and raise a descriptive error if the config key is missing.
 
 ### Async payroll processing (backlog — not yet implemented)
 

@@ -13,6 +13,7 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from app.models.employer import Employer
     from app.models.leave import LeaveBalance
+    from app.models.leave_period import LeavePeriod
     from app.models.member import Member
     from app.models.plan_config import PlanTier, PlanType
     from app.models.salary import SalaryHistory
@@ -39,3 +40,4 @@ class EmploymentRecord(TimestampMixin, Base):
     salary_history: Mapped[list[SalaryHistory]] = relationship(back_populates="employment")
     leave_balances: Mapped[list[LeaveBalance]] = relationship(back_populates="employment")
     service_credit_entries: Mapped[list[ServiceCreditEntry]] = relationship(back_populates="employment")
+    leave_periods: Mapped[list[LeavePeriod]] = relationship(back_populates="employment")
