@@ -50,7 +50,7 @@ def jane_request(**overrides) -> BenefitCalculationRequest:
         birth_date=date(1965, 3, 15),
         retirement_date=date(2025, 1, 15),
         termination_date=date(2025, 1, 15),
-        surs_service_years=Decimal("25"),
+        system_service_years=Decimal("25"),
         salary_history=JANE_SALARY_HISTORY,
     )
     defaults.update(overrides)
@@ -238,7 +238,7 @@ def test_jane_smith_full_calculation():
     assert result.plan_type == "traditional"
 
     # Service credit
-    assert result.service_credit.surs_service == Decimal("25.00")
+    assert result.service_credit.system_service == Decimal("25.00")
     assert result.service_credit.sick_leave_credit == Decimal("0")
     assert result.service_credit.total == Decimal("25.00")
 
@@ -330,7 +330,7 @@ def test_hb2616_minimum_floor():
         birth_date=date(1945, 3, 15),  # age 79 at retirement
         retirement_date=date(2025, 1, 15),
         termination_date=date(2025, 1, 15),
-        surs_service_years=Decimal("8"),
+        system_service_years=Decimal("8"),
         salary_history=[
             SalaryPeriod(start_date=date(2017, 1, 1), end_date=date(2025, 1, 15), annual_salary=Decimal("10000")),
         ],

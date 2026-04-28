@@ -24,10 +24,10 @@ def sick_leave_credit(unused_days: int, retirement_date: date, termination_date:
 
 
 def compute_service_credit_totals(
-    surs_service_years: Decimal,
+    system_service_years: Decimal,
     sick_credit: Decimal,
     ope_service_years: Decimal,
     military_service_years: Decimal,
     reciprocal_service_years: Decimal,
 ) -> Decimal:
-    return surs_service_years + sick_credit + ope_service_years + military_service_years + reciprocal_service_years
+    return system_service_years + sick_credit + ope_service_years + military_service_years + reciprocal_service_years

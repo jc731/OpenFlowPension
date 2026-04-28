@@ -44,9 +44,9 @@
 
 | Component | Notes |
 |---|---|
-| `surs_service` | Base SURS employment service credit |
+| `system_service` | Base pension system employment service credit |
 | `sick_leave_credit` | Unused/unpaid sick leave converted to service (see table below). Only if retired within 60 days of termination. Max 1.0 year. |
-| `surs_total_with_sick` | `surs_service + sick_leave_credit` |
+| `surs_total_with_sick` | `system_service + sick_leave_credit` |
 | `ope_service` | Other Public Employment — purchased service credit. Used in MP formula separately (multiplier = 2x, not 2.4x). |
 | `military_service` | Purchased. Used in MP formula separately (multiplier = 1x). |
 | `reciprocal_service` | From reciprocal systems. Added for eligibility; used in General Formula if applicable. Not used in Police/Fire formula. |
@@ -425,7 +425,7 @@ Only needed when member has service in one or more of the 13 Illinois reciprocal
   "tier": "I" | "II",
   "plan_type": "traditional" | "portable",
   "service_credit": {
-    "surs_service": 0.00,
+    "system_service": 0.00,
     "sick_leave_credit": 0.00,
     "ope_service": 0.00,
     "military_service": 0.00,

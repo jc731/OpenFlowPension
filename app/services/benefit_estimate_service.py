@@ -59,7 +59,7 @@ async def get_estimate(
     if not salary_periods:
         raise ValueError("No salary history found for this member — cannot calculate benefit")
 
-    surs_service_years = await _total_service_credit(member_id, session)
+    system_service_years = await _total_service_credit(member_id, session)
     mp_contributions = await _mp_contributions(member_id, session)
     is_police_fire = await _is_police_fire(member_id, session)
 
@@ -70,7 +70,7 @@ async def get_estimate(
         birth_date=member.date_of_birth,
         retirement_date=retirement_date,
         termination_date=termination_date,
-        surs_service_years=Decimal(str(surs_service_years)),
+        system_service_years=Decimal(str(system_service_years)),
         sick_leave_days=sick_leave_days,
         salary_history=salary_periods,
         money_purchase_contributions=mp_contributions,

@@ -52,14 +52,14 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
     # ── 2. Service credit ──────────────────────────────────────────────────────
     sick_credit = sick_leave_credit(req.sick_leave_days, req.retirement_date, req.termination_date)
     total_service = compute_service_credit_totals(
-        req.surs_service_years,
+        req.system_service_years,
         sick_credit,
         req.ope_service_years,
         req.military_service_years,
         req.reciprocal_service_years,
     )
     service_result = ServiceCreditResult(
-        surs_service=_quantize(req.surs_service_years),
+        system_service=_quantize(req.system_service_years),
         sick_leave_credit=sick_credit,
         ope_service=_quantize(req.ope_service_years),
         military_service=_quantize(req.military_service_years),
@@ -195,7 +195,7 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
     )
 
     # ── 12. Insurance service years ────────────────────────────────────────────
-    eligible_insurance_years = _quantize(req.surs_service_years + req.ope_service_years)
+    eligible_insurance_years = _quantize(req.system_service_years + req.ope_service_years)
 
     return BenefitCalculationResult(
         member_id=req.member_id,

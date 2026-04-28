@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, and contract/status management are built. Auth, frontend, and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, and DB-backed benefit estimate are built. Auth, frontend, and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -263,6 +263,37 @@ Service structure (proposed): `app/services/survivor_service.py`
 
 Plan rules for lump sum amounts and continuation periods should live in `system_configurations` (same config service pattern). Defer until first fund goes live.
 
+### Disability benefit module (backlog — deferred, high complexity)
+
+Disability benefits are intentionally excluded from the initial build. Rules vary significantly by fund and state; do not implement speculatively. Placeholder notes for when a fund requests this feature:
+
+**Two disability types (typical):**
+- **Ordinary/non-occupational** — illness or injury not job-related; typically 50% of final salary
+- **Duty/occupational** — job-related injury; typically 75% of final salary; often no minimum service requirement
+
+**Key sub-topics to implement:**
+- Eligibility rules: minimum service years, age cutoffs, medical certification — store in `system_configurations`
+- Benefit amount: percentage of salary at time of disability onset, not retirement FAE
+- Workers' compensation offset: WC payments reduce disability benefit (dollar-for-dollar or formula); WC payment amount is stored as a `DeductionOrder` with `deduction_type=workers_compensation` using the existing deduction pattern
+- Annual medical recertification: flag on a `disability_claims` table; payments suspend if recertification lapses
+- Recovery: member returns to active employment; service credit and contribution history are preserved from before disability onset
+
+**Transition events (the complex part):**
+- **Disability → regular retirement**: when a disabled member reaches normal retirement age, convert to regular retirement benefit. Near-automatic; triggered by age check.
+- **Disability → disability retirement**: after a qualifying period (typically 3–5 years) on temporary disability, member may be permanently converted to disability retirement with a separate benefit formula. Requires both duration AND continued medical certification.
+- These two paths use different formulas — do not assume the regular `calculate_benefit()` engine applies without modification.
+
+**Workers' comp integration options (three tiers):**
+1. **Manual** — staff enters WC payment amounts per period; system applies offset. Lowest effort; sufficient for small funds.
+2. **Employer reporting** — extend the payroll report CSV format with a `workers_comp_payment` column; employer reports alongside regular payroll. Medium effort; keeps intake path consistent.
+3. **State WC board integration** — some states publish WC claim data via API or SFTP (e.g., IL Workers' Compensation Commission). Requires a data-sharing agreement and a polling/webhook integration layer. Highest accuracy; build only if a fund requires it.
+
+**Data model sketch (when built):**
+- New table: `disability_claims` — `member_id`, `claim_date`, `disability_type` (ordinary | duty), `onset_date`, `wc_case_number`, `benefit_amount`, `status` (active | suspended | converted | closed), `last_certified_date`
+- New member status: `disability` — add to the valid statuses in `contract_service`
+- New payment type: `disability_benefit` — add to `payment_type` on `benefit_payments`
+- WC offsets: use existing `DeductionOrder` with `deduction_type=workers_compensation`
+
 ### Service purchase module (backlog — not yet implemented)
 
 Members can purchase service credit for prior periods (military service, refunded service, etc.). Two-step flow:
@@ -287,9 +318,15 @@ For large files (>1,000 rows), payroll ingestion should be offloaded to a Celery
 
 Validate ABA routing numbers against the Federal Reserve's E-Payments Routing Directory (EPRD), which is a downloadable CSV of all valid routing numbers. Also check Fedwire eligibility for wire payments. Implement as a pre-save validation hook in `bank_account_service.add_bank_account`. Low priority until payment processing is live.
 
-### Member benefit estimate endpoint (backlog — not yet implemented)
+### Member benefit estimate endpoint
 
-`GET /api/v1/members/{id}/benefit-estimate` — DB-backed convenience wrapper for internal/admin use. Queries the member's salary history, service credit entries, plan tier/type, and cert date; assembles a `BenefitCalculationRequest`; and delegates to the same `calculate_benefit()` engine. No new math — just DB plumbing. Useful once an admin UI exists. Implement when the frontend is ready to consume it.
+`GET /api/v1/members/{id}/benefit-estimate?retirement_date=YYYY-MM-DD` — DB-backed convenience wrapper for staff/admin use. Assembles a `BenefitCalculationRequest` from the member's posted salary history, service credit ledger, contribution records, and employment type, then delegates to the stateless `calculate_benefit()` engine. No new math.
+
+Query params: `retirement_date` (required), `sick_leave_days` (default 0), `benefit_option_type` (default `single_life`), `beneficiary_age` (optional for J&S / reversionary options).
+
+Raises 422 if member is missing certification date, plan choice, or salary history. Active members use `retirement_date` as their `termination_date`; terminated members use the most recent `termination_date` from their employment records.
+
+Service: `app/services/benefit_estimate_service.py`.
 
 ### Config service pattern
 

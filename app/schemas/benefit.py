@@ -37,7 +37,7 @@ class BenefitCalculationRequest(BaseModel):
     retirement_date: date
     termination_date: date
 
-    surs_service_years: Decimal
+    system_service_years: Decimal
     sick_leave_days: int = 0
     ope_service_years: Decimal = Decimal("0")
     military_service_years: Decimal = Decimal("0")
@@ -60,7 +60,7 @@ class BenefitCalculationRequest(BaseModel):
 
 class ServiceCreditResult(BaseModel):
     model_config = ConfigDict(from_attributes=False)
-    surs_service: Decimal
+    system_service: Decimal
     sick_leave_credit: Decimal
     ope_service: Decimal
     military_service: Decimal
