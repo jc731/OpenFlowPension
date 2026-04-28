@@ -1,7 +1,9 @@
-# SURS Retirement Benefit Calculation — Technical Specification
+# Retirement Benefit Calculation — Technical Specification
+
+> **Derivation note:** This spec was written from SURS (State Universities Retirement System of Illinois) source documents. The calculation engine (`app/services/benefit/`) is implemented to be fund-configurable — plan rules, thresholds, and rates live in `system_configurations` and `plan_configurations`, not hardcoded. Where SURS-specific values appear (contribution rates, employer count, Illinois reciprocal systems, etc.) they are noted inline. Other funds will differ on those points.
 
 **Scope:** Traditional and Portable Plan only. RSP (Self-Managed Plan) is excluded.  
-**Authority:** 40 ILCS 5/15-136 (Illinois Pension Code); JCAR Section 1600.420  
+**Authority (SURS):** 40 ILCS 5/15-136 (Illinois Pension Code); JCAR Section 1600.420  
 **Source docs:** 03 Retirement Claims BPR v2.0 (2020), 11 Retirement Estimates BPR v2.0 (2020), SURS FAQs
 
 ---
@@ -16,7 +18,7 @@
 | `birth_date` | Required. Must be verified before PEP can be issued. |
 | `retirement_date` | Effective date of retirement (first day of month, or any day — but payment starts first of following month) |
 | `termination_date` | Last day worked + 1; or last day of employment |
-| `employer` | SURS-covered employer (one of ~60 agencies) |
+| `employer` | Pension system employer *(SURS has ~60 covered agencies; count varies by fund)* |
 | `position` | Optional. Defaults to "staff." Used to confirm salary classification and contribution rate. |
 
 **Tier logic:**
@@ -46,11 +48,11 @@
 |---|---|
 | `system_service` | Base pension system employment service credit |
 | `sick_leave_credit` | Unused/unpaid sick leave converted to service (see table below). Only if retired within 60 days of termination. Max 1.0 year. |
-| `surs_total_with_sick` | `system_service + sick_leave_credit` |
+| `system_total_with_sick` | `system_service + sick_leave_credit` |
 | `ope_service` | Other Public Employment — purchased service credit. Used in MP formula separately (multiplier = 2x, not 2.4x). |
 | `military_service` | Purchased. Used in MP formula separately (multiplier = 1x). |
 | `reciprocal_service` | From reciprocal systems. Added for eligibility; used in General Formula if applicable. Not used in Police/Fire formula. |
-| `total_service_with_reciprocal` | `surs_total_with_sick + reciprocal_service` |
+| `total_service_with_reciprocal` | `system_total_with_sick + reciprocal_service` |
 
 ### 3.2 Sick Leave Conversion Table
 
@@ -182,7 +184,7 @@ Sum of all tiers × fae_annual = annual_general_benefit
 total_MP_benefit = standard_MP_benefit + ope_MP_benefit + military_MP_benefit
 ```
 
-Note: "Divided by factor" on the hand calc sheet refers to the actuarial factor lookup. This table is maintained by SURS and is age-based.
+Note: "Divided by factor" on the hand calc sheet refers to the actuarial factor lookup. This table is maintained by the fund's actuary and is age-based. Current tables in `data/actuarial_tables/` are from the SURS 2024 Experience Review.
 
 ---
 
@@ -209,7 +211,7 @@ Supplemental payment is recalculated annually after each AAI is applied, until i
 ### 5.4 Police/Firefighter Formula (Conditional)
 
 **Eligibility (Tier I):**
-- Contributed 9.5% to SURS, AND
+- Contributed at the P/F contribution rate *(9.5% for SURS — fund-specific; store in `system_configurations`)*, AND
 - Age 50+ with ≥ 25 years P/F service, OR age 55+ with ≥ 20 but < 25 years P/F service
 
 **Eligibility (Tier II):**
@@ -225,11 +227,11 @@ Sum (capped at 80%) × police_fire_FAE = annual_PF_benefit
 
 **FAE for P/F:** Use highest of 4 consecutive academic years, 48 months, or base rate on last day worked (Tier I).
 
-**Reciprocal service:** Not included in P/F formula. Non-P/F SURS service is calculated using General Formula and added.
+**Reciprocal service:** Not included in P/F formula. Non-P/F system service is calculated using General Formula and added.
 
 **Cert date matters for service credit scope:**
-- Certified on or after 1988-01-26: only P/F service used in P/F formula; other SURS service → General Formula
-- Certified before 1988-01-26: all SURS service may be considered
+- Certified on or after 1988-01-26: only P/F service used in P/F formula; other system service → General Formula
+- Certified before 1988-01-26: all system service may be considered
 
 **If P/F eligibility not met:**
 - Terminated before 1998-08-14: additional 1.5% contributions refunded as lump sum or additional annuity
@@ -389,7 +391,7 @@ Only needed when member has service in one or more of the 13 Illinois reciprocal
 - Combined service must meet the longest minimum service requirement of any participating system
 - Only 1.0 year of service credit per academic year across all systems combined
 - Benefit start date must be the same in all systems (exceptions: different backdating provisions, age minimums, payment date rules)
-- SURS may use FAE from a reciprocal system if higher than SURS FAE (20% earnings cap and 4-year minimum still apply)
+- The pension system may use FAE from a reciprocal system if higher than the member's own FAE (20% earnings cap and 4-year minimum still apply) *(SURS-derived rule — verify applicability per fund)*
 - Reciprocal service credit is **not** used in the Police/Firefighter Formula
 
 ---
@@ -399,7 +401,7 @@ Only needed when member has service in one or more of the 13 Illinois reciprocal
 ```
 1. Determine tier (cert_date)
 2. Check eligibility (age + service)
-3. Calculate service credit total (SURS + sick leave + OPE + military; add reciprocal if applicable)
+3. Calculate service credit total (system service + sick leave + OPE + military; add reciprocal if applicable)
 4. Compute FAE using applicable method (Tier I: High 4 vs 48-month; Tier II: High 8 vs 96-month)
    → Apply 20% earnings cap
    → Apply part-time adjustment if applicable

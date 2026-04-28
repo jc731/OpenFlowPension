@@ -1,6 +1,6 @@
 # Actuarial Tables
 
-SURS actuarial factor tables used in benefit option calculations. Source Excel files are in `Docs/source/`.
+Actuarial factor tables used in benefit option calculations. Current tables are from the SURS 2024 Experience Review — replace with fund-specific tables at deployment. Source Excel files are in `Docs/source/`.
 
 ## Files
 
@@ -21,7 +21,7 @@ All tables are 120×120. The factor at `(bene_age, member_age)` is applied as:
 
 ## Updating
 
-When SURS publishes a new experience review, convert the new Excel file using the same sheet structure (data starts row 10, ages 1–120 in rows 11–130 and columns B–DQ) and add new CSVs with the new effective date in the filename. The effective date is the date the new tables take effect, not the review publication date.
+When the fund's actuary publishes a new experience review, convert the new Excel file using the same sheet structure (data starts row 10, ages 1–120 in rows 11–130 and columns B–DQ) and add new CSVs with the new effective date in the filename. The effective date is the date the new tables take effect, not the review publication date.
 
-Current tables: **2024 Experience Review**, effective **2024-07-02**
+Current tables: **SURS 2024 Experience Review**, effective **2024-07-02**
 Basis: 6.50% interest, Pub-2010 Healthy Retiree Mortality Tables, MP-2021 projection scale

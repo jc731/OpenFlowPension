@@ -92,20 +92,20 @@ All routers depend on `get_current_user()` from `app/api/deps.py`. It returns a 
 
 **Two auth paths are planned, handled by the same `get_current_user` dependency:**
 - **Keycloak JWT** — for human users (fund staff, admin UI). Not yet integrated.
-- **API keys** — for machine-to-machine (external systems, payroll integrations, SURS-style callers). Not yet implemented. See `api_keys` in the backlog below.
+- **API keys** — for machine-to-machine (external systems, payroll integrations, employer portals). Not yet implemented. See `api_keys` in the backlog below.
 
 Routers must never check auth logic inline. When real auth ships, only `deps.py` changes — router signatures stay the same.
 
 ### Actuarial tables
 
-SURS actuarial factor tables live in `data/actuarial_tables/` as CSVs (120×120, beneficiary age × member age). Source Excel files are in `Docs/source/`. Tables are loaded at runtime by the benefit calculation engine — do not inline these values in code.
+Actuarial factor tables live in `data/actuarial_tables/` as CSVs (120×120, beneficiary age × member age). Source Excel files are in `Docs/source/`. Tables are loaded at runtime by the benefit calculation engine — do not inline these values in code. Replace with fund-specific tables at deployment.
 
-Current tables (2024 Experience Review, effective 2024-07-02):
+Current tables (SURS 2024 Experience Review, effective 2024-07-02):
 - `reversionary_value` — value of $1/month of Option 1 reversionary annuity
 - `reversionary_reduction` — member pension reduction per $1/month of reversionary annuity
 - `js_50pct`, `js_75pct`, `js_100pct` — Portable plan J&S survivor factors
 
-When SURS publishes a new experience review, add new CSVs with the updated effective date. See `data/actuarial_tables/README.md` for the update process.
+When the fund's actuary publishes a new experience review, add new CSVs with the updated effective date. See `data/actuarial_tables/README.md` for the update process.
 
 ### API keys (backlog — not yet implemented)
 

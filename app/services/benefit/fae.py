@@ -4,7 +4,7 @@ Supports:
   Method A — High 4 (or 8 for Tier II) consecutive academic years
   Method C — Actual service/earnings (fewer than 4/8 years available)
 
-Academic year at SURS: July 1 – June 30.
+Academic year: July 1 – June 30 (SURS convention; other funds may differ).
 Earnings cap: any AY after 1997-06-30 where earnings increased ≥ 20% over
 the prior AY with the same employer are capped at prior + 20%.
 """
