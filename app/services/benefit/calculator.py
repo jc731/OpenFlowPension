@@ -2,6 +2,9 @@
 
 Implements the 15-step decision tree from spec Section 15.
 Pure function — no database access.  All inputs come via BenefitCalculationRequest.
+
+Pass a FundConfig as the second argument to override SURS defaults.
+Omitting it (or passing None) produces SURS-identical results.
 """
 
 from datetime import date
@@ -21,6 +24,7 @@ from app.schemas.benefit import (
     PoliceFireResult,
     ServiceCreditResult,
 )
+from app.schemas.fund_config import FundConfig
 from app.services.benefit.aai import compute_aai
 from app.services.benefit.age_reduction import compute_age_reduction
 from app.services.benefit.eligibility import age_years_months, determine_tier
@@ -45,12 +49,38 @@ def _quantize(v: Decimal) -> Decimal:
     return v.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResult:
+def _bands(fund_bands: list) -> list[tuple[Decimal | None, Decimal]]:
+    """Convert list[FormulaBand] → list of (years | None, rate) tuples."""
+    return [(b.years, b.rate) for b in fund_bands]
+
+
+def _pf_rules(fund_rules: list) -> list[tuple[int, int, int | None]]:
+    """Convert list[PfEligibilityRule] → list of (min_age, min_pf_years, max_pf_years)."""
+    return [(r.min_age, r.min_pf_years, r.max_pf_years) for r in fund_rules]
+
+
+def calculate_benefit(
+    req: BenefitCalculationRequest,
+    config: FundConfig | None = None,
+) -> BenefitCalculationResult:
+    cfg = config or FundConfig()
+
     # ── 1. Tier ────────────────────────────────────────────────────────────────
-    tier = determine_tier(req.cert_date)
+    tier = determine_tier(req.cert_date, tier_cutoff_date=cfg.tier_cutoff_date)
 
     # ── 2. Service credit ──────────────────────────────────────────────────────
-    sick_credit = sick_leave_credit(req.sick_leave_days, req.retirement_date, req.termination_date)
+    step_table = [(s.min_days, s.credit_years) for s in cfg.sick_leave_step_table]
+    sick_credit = sick_leave_credit(
+        req.sick_leave_days,
+        req.retirement_date,
+        req.termination_date,
+        method=cfg.sick_leave_method,
+        step_table=step_table,
+        proportional_days_per_month=cfg.sick_leave_proportional_days_per_month,
+        max_credit_years=cfg.sick_leave_max_credit_years,
+        min_days=cfg.sick_leave_min_days,
+        max_gap_days=cfg.sick_leave_max_gap_days,
+    )
     total_service = compute_service_credit_totals(
         req.system_service_years,
         sick_credit,
@@ -73,6 +103,14 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
         tier,
         req.termination_date,
         req.is_twelve_month_contract,
+        tier_i_years=cfg.fae_tier_i_years,
+        tier_ii_years=cfg.fae_tier_ii_years,
+        tier_ii_restrict_last_n_years=cfg.fae_tier_ii_restrict_last_n_years,
+        ay_month=cfg.fae_academic_year_start_month,
+        ay_day=cfg.fae_academic_year_start_day,
+        spike_cap_enabled=cfg.fae_spike_cap_enabled,
+        spike_cap_rate=cfg.fae_spike_cap_rate,
+        spike_cap_effective_date=cfg.fae_spike_cap_effective_date,
     )
     fae_result = FaeResult(
         method_used=fae_method,
@@ -83,15 +121,39 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
 
     # ── 4. Benefit cap ─────────────────────────────────────────────────────────
     age_y, _ = age_years_months(req.birth_date, req.retirement_date)
-    cap_pct = determine_benefit_cap(req.termination_date, age_y, req.cert_date)
+    cap_pct = determine_benefit_cap(
+        req.termination_date,
+        age_y,
+        req.cert_date,
+        modern_cap_pct=cfg.max_benefit_cap_pct,
+        modern_term_date=cfg.max_benefit_cap_modern_date,
+        use_historical_table=cfg.max_benefit_cap_use_historical_table,
+    )
     cap_monthly = _quantize(fae_annual * cap_pct / 100 / 12)
 
     # ── 5. General Formula ─────────────────────────────────────────────────────
-    general_annual = compute_general_annual(total_service, fae_annual, req.termination_date)
+    general_annual = compute_general_annual(
+        total_service,
+        fae_annual,
+        req.termination_date,
+        multiplier=cfg.general_formula_multiplier,
+        effective_date=cfg.general_formula_effective_date,
+        pre_bands=_bands(cfg.general_formula_pre_bands),
+        always_use_bands=cfg.general_formula_always_use_bands,
+        bands=_bands(cfg.general_formula_bands) if cfg.general_formula_bands else None,
+    )
     general_monthly_unreduced = _quantize(general_annual / 12)
 
     age_red_months, age_red_factor = compute_age_reduction(
-        tier, req.birth_date, req.retirement_date, total_service
+        tier,
+        req.birth_date,
+        req.retirement_date,
+        total_service,
+        tier_i_normal_age=cfg.age_reduction_tier_i_normal_age,
+        tier_i_rate_per_month=cfg.age_reduction_tier_i_rate_per_month,
+        tier_i_no_reduction_years=cfg.age_reduction_tier_i_no_reduction_years,
+        tier_ii_normal_age=cfg.age_reduction_tier_ii_normal_age,
+        tier_ii_rate_per_month=cfg.age_reduction_tier_ii_rate_per_month,
     )
     general_monthly_reduced = _quantize(general_monthly_unreduced * age_red_factor)
 
@@ -105,7 +167,10 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
     )
 
     # ── 6. Money Purchase (if eligible) ────────────────────────────────────────
-    mp_applicable = is_mp_eligible(req.cert_date) and req.money_purchase_contributions is not None
+    mp_applicable = (
+        is_mp_eligible(req.cert_date, cutoff_date=cfg.mp_eligibility_cutoff_date)
+        and req.money_purchase_contributions is not None
+    )
     if mp_applicable and req.mp_actuarial_factor:
         mpc = req.money_purchase_contributions  # type: ignore[union-attr]
         std_mp, ope_mp, mil_mp, total_mp = compute_money_purchase_monthly(
@@ -130,10 +195,18 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
             req.birth_date,
             req.retirement_date,
             req.police_fire_service_years,
-            contributed_9_5_pct=True,  # assumed when is_police_fire=True
+            contributed_threshold=True,  # assumed when is_police_fire=True
+            tier_i_rules=_pf_rules(cfg.pf_tier_i_eligibility),
+            tier_ii_min_age=cfg.pf_tier_ii_min_age,
+            tier_ii_min_years=cfg.pf_tier_ii_min_years,
         )
         if pf_applicable:
-            pf_monthly = compute_police_fire_monthly(req.police_fire_service_years, fae_annual)
+            pf_monthly = compute_police_fire_monthly(
+                req.police_fire_service_years,
+                fae_annual,
+                bands=_bands(cfg.pf_formula_bands),
+                max_benefit_pct=cfg.pf_max_benefit_pct,
+            )
     pf_result = PoliceFireResult(applicable=pf_applicable, monthly=pf_monthly)
 
     formulas_result = FormulasResult(
@@ -151,7 +224,7 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
 
     formula_selected, base_monthly = max(candidates, key=lambda x: x[1])
 
-    # Apply 80% (or applicable) cap
+    # Apply cap
     capped = base_monthly > cap_monthly
     if capped:
         base_monthly = cap_monthly
@@ -168,15 +241,18 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
     final_monthly = option_result.reduced_annuity_monthly
 
     # ── 10. AAI ────────────────────────────────────────────────────────────────
-    # Tier I AAI basis = unreduced annuity (even if reversionary elected)
-    # Tier II AAI basis = reduced annuity (J&S elected)
     if req.plan_type == "traditional":
         aai_basis = base_monthly
     else:
         aai_basis = final_monthly
 
     rate_type, first_increase_date, aai_basis_used = compute_aai(
-        tier, req.retirement_date, req.birth_date, aai_basis
+        tier,
+        req.retirement_date,
+        req.birth_date,
+        aai_basis,
+        tier_i_cola_type=cfg.cola_tier_i_type,
+        tier_ii_deferral_age=cfg.cola_tier_ii_deferral_age,
     )
     aai_result = AaiResult(
         rate_type=rate_type,
@@ -185,8 +261,11 @@ def calculate_benefit(req: BenefitCalculationRequest) -> BenefitCalculationResul
     )
 
     # ── 11. HB2616 minimum ─────────────────────────────────────────────────────
-    min_svc = min(total_service, Decimal("30"))
-    hb2616_min = _quantize(Decimal("25") * min_svc)
+    if cfg.hb2616_enabled:
+        min_svc = min(total_service, cfg.hb2616_max_service_years)
+        hb2616_min = _quantize(cfg.hb2616_per_service_year * min_svc)
+    else:
+        hb2616_min = Decimal("0")
     supplemental = max(Decimal("0"), _quantize(hb2616_min - final_monthly))
 
     hb2616_result = Hb2616Result(

@@ -314,32 +314,37 @@ Disability benefits are intentionally excluded from the initial build. Rules var
 - New payment type: `disability_benefit` — add to `payment_type` on `benefit_payments`
 - WC offsets: use existing `DeductionOrder` with `deduction_type=workers_compensation`
 
-### Calculation parameter externalization (backlog — fund portability)
+### Calculation parameter externalization (built — fund portability)
 
-Several values currently baked into the benefit calculation engine are SURS-specific and will need to be fund-configurable before a second fund goes live. Two categories:
+All fund-specific calculation rules are now externalized through `FundConfig` (`app/schemas/fund_config.py`). SURS values are the defaults; any field can be overridden for a second fund.
 
-**`system_configurations` is sufficient** (scalar rules, already the right pattern):
-- Police/fire contribution rate (currently 9.5% — drives P/F eligibility check)
-- Police/fire eligibility thresholds (age + service minimums by tier)
-- General Formula multipliers and breakpoints (currently 2.2% post-1997, graduated pre-1997)
-- Sick leave conversion table (currently the 20/60/120/180-day step table)
-- Age reduction rate (currently 0.5%/month)
-- HB2616 minimum floor amount (currently $25/year of service, $750 max)
-- Tier I/II cutoff date (currently 2011-01-01)
-- Tier I money purchase eligibility cutoff (currently cert_date < 2005-07-01)
-- Academic year start/end dates (currently Jul 1–Jun 30)
-- Maximum benefit cap percentage (currently 80%)
+**How it works:**
 
-Store each as a JSONB config value with effective date so historic calculations still work. The calculation engine already calls `get_config()` for accrual rules — extend the same pattern.
+`calculate_benefit(req, config=None)` accepts an optional `FundConfig` as its second argument. Passing `None` (or omitting it) produces SURS-identical results — all existing tests pass unchanged.
 
-**Dedicated tables required** (matrix data, too large for JSONB):
-- **Actuarial factor tables** — reversionary value, reversionary reduction, J&S 50/75/100 factors. Currently loaded from CSV files in `data/actuarial_tables/`. These are 120×120 matrices (member_age × beneficiary_age). Options when this is built:
-  - `actuarial_factors` table: `(fund_id, table_type, effective_date, member_age, beneficiary_age, factor)` — fully relational, flexible, slow on large lookups
-  - Keep CSVs but add a `fund_id` prefix to filenames and a `funds` table that maps a fund to its active table set — simpler, preserves current loading pattern
-  - JSONB column storing the full matrix per row — compact but opaque; avoid
-  - Recommended: keep CSVs with fund-prefixed filenames; the loader in `benefit/actuarial.py` already uses `lru_cache` and effective-date selection, so adding a `fund_id` dimension is low-effort
+`load_fund_config(as_of, session)` (`app/services/fund_config_service.py`) reads the `fund_calculation_config` key from `system_configurations` as JSONB, deserializes into `FundConfig`, and falls back to `FundConfig()` if the key is absent.
 
-**When to do this:** Before onboarding a second fund whose rules differ from SURS. The current engine is correct for SURS; do not refactor speculatively for a hypothetical fund. When the second fund's rules are known, the diff between their rules and SURS rules determines exactly which parameters need to move to config.
+`benefit_estimate_service.get_estimate()` loads FundConfig from the DB and passes it to `calculate_benefit()`. The stateless `/calculate/benefit` endpoint uses `FundConfig()` defaults.
+
+**Parameters externalized:**
+
+| Module | What is now configurable |
+|---|---|
+| `eligibility.py` | `tier_cutoff_date` |
+| `fae.py` | FAE window sizes per tier, Tier II restriction window, AY start month/day, spike cap on/off/rate/effective date |
+| `age_reduction.py` | Normal age per tier, reduction rate per tier, no-reduction service threshold |
+| `formulas/general.py` | Flat multiplier, effective date, pre-bands, always-use-bands flag, bands (for IMRF-style always-graduated funds) |
+| `formulas/money_purchase.py` | Eligibility cutoff date (None = all members eligible) |
+| `formulas/police_fire.py` | Contribution rate threshold, Tier I eligibility rules, Tier II age/service minimums, formula bands, max benefit % |
+| `max_cap.py` | Modern cap %, modern term date, historical table on/off |
+| `aai.py` | Tier I COLA type (3pct_compound vs 3pct_simple), Tier II deferral age |
+| `service_credit.py` | Sick leave method (step_table vs proportional), step table rows, proportional rate, max credit years, min days, max gap days |
+| `calculator.py` | HB2616 enabled/disabled, per-service-year amount, max service years |
+
+**Dedicated tables still required** (matrix data, too large for JSONB):
+- **Actuarial factor tables** — reversionary value, reversionary reduction, J&S 50/75/100 factors. Currently loaded from CSV files in `data/actuarial_tables/`. These are 120×120 matrices (member_age × beneficiary_age). Recommended: keep CSVs with fund-prefixed filenames when a second fund is onboarded; the loader in `benefit/actuarial.py` already uses `lru_cache` and effective-date selection, so adding a `fund_id` dimension is low-effort.
+
+**When to add a new fund:** Seed a `system_configurations` row with key `fund_calculation_config` containing the overrides for that fund as JSONB. Only override what differs from SURS — all other fields default to SURS values.
 
 ### Service purchase module (backlog — not yet implemented)
 
