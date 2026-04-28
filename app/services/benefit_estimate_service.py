@@ -29,6 +29,7 @@ from app.schemas.benefit import (
     SalaryPeriod,
 )
 from app.services.benefit.calculator import calculate_benefit
+from app.services.fund_config_service import load_fund_config
 
 
 async def get_estimate(
@@ -78,7 +79,8 @@ async def get_estimate(
         benefit_option=benefit_option,
     )
 
-    return calculate_benefit(request)
+    fund_config = await load_fund_config(retirement_date, session)
+    return calculate_benefit(request, fund_config)
 
 
 async def _latest_termination_date(member_id: uuid.UUID, session: AsyncSession) -> date | None:

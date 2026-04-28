@@ -8,6 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 _MODERN_TERM_DATE = date(1997, 7, 7)
+_MODERN_CAP_PCT = Decimal("80")
 
 
 def _pre_modern_cap(term_date: date, age_at_retirement: int, cert_date: date) -> Decimal:
@@ -78,8 +79,12 @@ def determine_benefit_cap(
     termination_date: date,
     age_at_retirement: int,
     cert_date: date,
+    *,
+    modern_cap_pct: Decimal = _MODERN_CAP_PCT,
+    modern_term_date: date = _MODERN_TERM_DATE,
+    use_historical_table: bool = True,
 ) -> Decimal:
     """Return the cap percentage (e.g. Decimal('80') means 80%)."""
-    if termination_date >= _MODERN_TERM_DATE:
-        return Decimal("80")
+    if termination_date >= modern_term_date or not use_historical_table:
+        return modern_cap_pct
     return _pre_modern_cap(termination_date, age_at_retirement, cert_date)

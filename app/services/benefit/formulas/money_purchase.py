@@ -15,8 +15,10 @@ from decimal import Decimal, ROUND_HALF_UP
 MP_ELIGIBILITY_CUTOFF = date(2005, 7, 1)
 
 
-def is_mp_eligible(cert_date: date) -> bool:
-    return cert_date < MP_ELIGIBILITY_CUTOFF
+def is_mp_eligible(cert_date: date, *, cutoff_date: date | None = MP_ELIGIBILITY_CUTOFF) -> bool:
+    if cutoff_date is None:
+        return True  # no cutoff — all members eligible (e.g. IMRF)
+    return cert_date < cutoff_date
 
 
 def compute_money_purchase_monthly(

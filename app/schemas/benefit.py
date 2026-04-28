@@ -118,7 +118,7 @@ class BenefitOptionResult(BaseModel):
 
 class AaiResult(BaseModel):
     model_config = ConfigDict(from_attributes=False)
-    rate_type: Literal["3pct_compound", "cpi_u_half"]
+    rate_type: Literal["3pct_compound", "3pct_simple", "cpi_u_half"]
     first_increase_date: date
     basis_amount: Decimal
 

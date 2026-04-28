@@ -5,8 +5,8 @@ TIER_I_CUTOFF = date(2011, 1, 1)
 ANY_AGE_30_YRS_MIN_TERM_DATE = date(2002, 8, 2)
 
 
-def determine_tier(cert_date: date) -> str:
-    return "I" if cert_date < TIER_I_CUTOFF else "II"
+def determine_tier(cert_date: date, *, tier_cutoff_date: date = TIER_I_CUTOFF) -> str:
+    return "I" if cert_date < tier_cutoff_date else "II"
 
 
 def age_years_months(birth_date: date, as_of: date) -> tuple[int, int]:
