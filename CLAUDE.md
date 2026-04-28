@@ -294,6 +294,33 @@ Disability benefits are intentionally excluded from the initial build. Rules var
 - New payment type: `disability_benefit` — add to `payment_type` on `benefit_payments`
 - WC offsets: use existing `DeductionOrder` with `deduction_type=workers_compensation`
 
+### Calculation parameter externalization (backlog — fund portability)
+
+Several values currently baked into the benefit calculation engine are SURS-specific and will need to be fund-configurable before a second fund goes live. Two categories:
+
+**`system_configurations` is sufficient** (scalar rules, already the right pattern):
+- Police/fire contribution rate (currently 9.5% — drives P/F eligibility check)
+- Police/fire eligibility thresholds (age + service minimums by tier)
+- General Formula multipliers and breakpoints (currently 2.2% post-1997, graduated pre-1997)
+- Sick leave conversion table (currently the 20/60/120/180-day step table)
+- Age reduction rate (currently 0.5%/month)
+- HB2616 minimum floor amount (currently $25/year of service, $750 max)
+- Tier I/II cutoff date (currently 2011-01-01)
+- Tier I money purchase eligibility cutoff (currently cert_date < 2005-07-01)
+- Academic year start/end dates (currently Jul 1–Jun 30)
+- Maximum benefit cap percentage (currently 80%)
+
+Store each as a JSONB config value with effective date so historic calculations still work. The calculation engine already calls `get_config()` for accrual rules — extend the same pattern.
+
+**Dedicated tables required** (matrix data, too large for JSONB):
+- **Actuarial factor tables** — reversionary value, reversionary reduction, J&S 50/75/100 factors. Currently loaded from CSV files in `data/actuarial_tables/`. These are 120×120 matrices (member_age × beneficiary_age). Options when this is built:
+  - `actuarial_factors` table: `(fund_id, table_type, effective_date, member_age, beneficiary_age, factor)` — fully relational, flexible, slow on large lookups
+  - Keep CSVs but add a `fund_id` prefix to filenames and a `funds` table that maps a fund to its active table set — simpler, preserves current loading pattern
+  - JSONB column storing the full matrix per row — compact but opaque; avoid
+  - Recommended: keep CSVs with fund-prefixed filenames; the loader in `benefit/actuarial.py` already uses `lru_cache` and effective-date selection, so adding a `fund_id` dimension is low-effort
+
+**When to do this:** Before onboarding a second fund whose rules differ from SURS. The current engine is correct for SURS; do not refactor speculatively for a hypothetical fund. When the second fund's rules are known, the diff between their rules and SURS rules determines exactly which parameters need to move to config.
+
 ### Service purchase module (backlog — not yet implemented)
 
 Members can purchase service credit for prior periods (military service, refunded service, etc.). Two-step flow:
