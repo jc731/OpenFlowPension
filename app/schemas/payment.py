@@ -107,6 +107,8 @@ class PaymentCreate(BaseModel):
     period_end: date
     payment_date: date
     gross_amount: Decimal = Field(gt=0)
+    # annuity | refund | death_benefit | survivor_annuity | lump_sum | other
+    payment_type: Literal["annuity", "refund", "death_benefit", "survivor_annuity", "lump_sum", "other"] = "annuity"
     payment_method: Literal["ach", "wire", "check", "eft", "other"]
     bank_account_id: uuid.UUID | None = None
     check_number: str | None = None
@@ -126,6 +128,7 @@ class PaymentRead(BaseModel):
     payment_date: date
     gross_amount: Decimal
     net_amount: Decimal
+    payment_type: str
     status: str
     payment_method: str
     check_number: str | None

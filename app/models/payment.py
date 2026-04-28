@@ -37,6 +37,8 @@ class BenefitPayment(Base):
     gross_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     net_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
 
+    # annuity | refund | death_benefit | survivor_annuity | lump_sum | other
+    payment_type: Mapped[str] = mapped_column(String, nullable=False, default="annuity", server_default="annuity")
     # pending | issued | held | reversed | cancelled
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending", server_default="pending")
     # ach | wire | check | eft | other

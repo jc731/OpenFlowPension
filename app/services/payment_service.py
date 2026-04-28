@@ -191,6 +191,7 @@ async def create_payment(
         payment_date=data.payment_date,
         gross_amount=float(gross),
         net_amount=float(net),
+        payment_type=data.payment_type,
         status="pending",
         payment_method=data.payment_method,
         check_number=data.check_number,

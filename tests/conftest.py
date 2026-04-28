@@ -22,6 +22,7 @@ import app.models.payment         # noqa: F401
 import app.models.payroll         # noqa: F401
 import app.models.member_status   # noqa: F401
 import app.models.leave_period    # noqa: F401
+import app.models.beneficiary     # noqa: F401  (also registers BeneficiaryBankAccount)
 
 TEST_DATABASE_URL = settings.database_url.replace("/openflow_pension", "/openflow_pension_test")
 

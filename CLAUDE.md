@@ -142,7 +142,7 @@ Service structure: `app/services/benefit/`
 Five tables handle payment generation and deductions:
 
 - `member_bank_accounts` — one row per bank account ever added. Routing number is plaintext (public ABA data); account number is Fernet-encrypted at app layer (same pattern as SSN). `is_primary` marks the default ACH destination. Never update routing/account fields — add a new row and close the old one.
-- `benefit_payments` — one row per member per pay period. `gross_amount` and `net_amount` are immutable once `status=issued`. Corrections: set `status=reversed`, create a new payment. `payment_method`: ach | wire | check | eft | other. `bank_account_id` nullable (check/wire may not reference an account row).
+- `benefit_payments` — one row per member per pay period. `gross_amount` and `net_amount` are immutable once `status=issued`. Corrections: set `status=reversed`, create a new payment. `payment_method`: ach | wire | check | eft | other. `payment_type`: annuity | refund | death_benefit | survivor_annuity | lump_sum | other — required, drives downstream reporting and GL coding. `bank_account_id` nullable (check/wire may not reference an account row).
 - `payment_deductions` — append-only ledger of deductions applied to a payment. Never UPDATE or DELETE. `deduction_type` is a plain string (not a DB enum) so new types require no migration. Well-known types: federal_tax, state_tax, medicare, health_insurance, dental, vision, life_insurance, union_dues, child_support, garnishment, other. `is_pretax` drives taxable gross computation.
 - `deduction_orders` — standing authorization records (court orders, benefit elections, union cards). `amount_type: fixed | percent_of_gross`. Active orders are auto-applied when generating a payment (`apply_standing_orders=True`). End an order by setting `end_date` — never delete.
 - `tax_withholding_elections` — member W-4 / state form elections. Immutable: new row supersedes old (same pattern as salary history). `jurisdiction` is an extensible string (federal, illinois, etc.).
@@ -213,6 +213,64 @@ Two responsibilities handled by `app/services/contract_service.py`:
 
 Both use the standard `get_config(key, as_of, session)` pattern and raise a descriptive error if the config key is missing.
 
+### Beneficiary management
+
+Beneficiaries are designated on a member account (`beneficiaries` table). `beneficiary_type` controls which name fields apply:
+- `individual` → `first_name` + `last_name` (+ optional `ssn_encrypted` / `ssn_last_four`)
+- `estate` → `org_name` (e.g. "Estate of Jane Smith")
+- `trust` → `org_name`
+- `organization` → `org_name`
+
+`is_primary` distinguishes primary vs contingent beneficiaries. `share_percent` records the allocation. `effective_date` / `end_date` support designation history.
+
+`linked_member_id` — if the beneficiary is also a pension system member, link their record here. When set, current demographic data comes from the Member record rather than the beneficiary row. This is a **bridge field for the planned party model refactor** (see Party model section below).
+
+`beneficiary_bank_accounts` stores ACH payment destinations for survivor/death benefit payments. Same immutability pattern as `member_bank_accounts`: never update routing/account fields — add a new row and close the old one. Account numbers are Fernet-encrypted (`account_number_encrypted: BYTEA`); `account_last_four` is used for display.
+
+Beneficiary bank account endpoints live under `GET/POST /api/v1/beneficiaries/{id}/bank-accounts` and `PATCH .../set-primary` / `.../close`.
+
+### Plan choice
+
+Members select a plan tier and plan type at enrollment. The plan choice window has a hard close (`plan_choice_locked=True`). Endpoints:
+- `POST /api/v1/members/{id}/plan-choice` — set `plan_tier_id`, `plan_type_id`, `choice_date` (rejected if locked)
+- `POST /api/v1/members/{id}/plan-choice/lock` — permanently locks the selection (validates that a choice was made first)
+
+Service: `app/services/plan_choice_service.py`.
+
+### Party model refactor (planned — not yet triggered)
+
+The current data model stores demographic information (name, DOB, SSN, contact) separately for each entity type: `members`, `beneficiaries`, and (in future) employer contacts, alternate payees, etc. This causes duplication when the same natural person appears in multiple roles.
+
+**Planned refactor:** Extract a shared `parties` table (`id`, `party_type`, `first_name`, `last_name`, `dob`, `ssn_encrypted`, etc.) and replace inline demographic fields in `members`, `beneficiaries`, and other tables with a `party_id` FK. Each entity keeps its role-specific fields (employment status, share_percent, etc.) but sources demographic data from the party record.
+
+**Why deferred:** The full set of party types is not yet known. Refactoring prematurely means migrating again as new types emerge. The `linked_member_id` bridge field on `Beneficiary` is the interim approach — it handles the most common case (beneficiary who is also a member) without requiring a full refactor.
+
+**Trigger condition:** Begin the refactor when **employer contacts** are added (the first non-member, non-beneficiary person type). At that point, the shared-demographics use case is proven and the full party table design becomes clear.
+
+**What to preserve:** `Beneficiary.linked_member_id` becomes `Beneficiary.party_id`. `Member` gets its own `party_id` FK. The bridge approach is designed to be a clean rename, not a rewrite.
+
+### Death and survivor benefit module (backlog — not yet implemented)
+
+When a member dies, the system must:
+1. Set status to `deceased` via `contract_service.record_death()`
+2. Identify beneficiaries (primary first; contingent if primary has predeceased)
+3. Calculate the survivor benefit: survivor annuity (reversionary option or J&S election) or lump sum death benefit, per the member's elected option and plan rules
+4. Create `BenefitPayment` rows with `payment_type=death_benefit` or `payment_type=survivor_annuity`, routed to `BeneficiaryBankAccount`
+
+Service structure (proposed): `app/services/survivor_service.py`
+- `calculate_survivor_benefit(member_id, event_date, session)` → stateless calculation delegating to existing actuarial tables in `benefit/actuarial.py`
+- `initiate_survivor_payments(member_id, event_date, session)` → write path creating payments
+
+Plan rules for lump sum amounts and continuation periods should live in `system_configurations` (same config service pattern). Defer until first fund goes live.
+
+### Service purchase module (backlog — not yet implemented)
+
+Members can purchase service credit for prior periods (military service, refunded service, etc.). Two-step flow:
+1. **Quote** (`POST /api/v1/members/{id}/service-purchase/quote`) — stateless; takes purchase type, years, and member demographics; returns cost using rate tables from `system_configurations`
+2. **Apply** (`POST /api/v1/members/{id}/service-purchase/apply`) — write path; validates payment received; posts a `ServiceCreditEntry` + a corresponding `ContributionRecord`
+
+Rate tables: store purchase cost factors in `system_configurations` keyed by `service_purchase_rates_{type}` with effective date. Defer until fund requests the feature.
+
 ### Async payroll processing (backlog — not yet implemented)
 
 For large files (>1,000 rows), payroll ingestion should be offloaded to a Celery task. Pattern: route creates a `PayrollReport` with `status=pending`, enqueues a Celery task with `report_id`, returns 202 Accepted immediately. Celery task fetches the report, processes rows, updates counts, sets `status=completed`. Use Redis as the Celery broker (already in docker-compose). Implement when employers are submitting production volumes.
@@ -263,6 +321,7 @@ Sensitive strings are encrypted at the application layer using Fernet symmetric 
 Fields using this pattern:
 - `members.ssn_encrypted: BYTEA` — never logged, never returned in API responses; `ssn_last_four` (plaintext) used for display
 - `member_bank_accounts.account_number_encrypted: BYTEA` — never returned in API responses; `account_last_four` used for display
+- `beneficiary_bank_accounts.account_number_encrypted: BYTEA` — same pattern as member bank accounts; used for survivor/death benefit ACH payments
 
 API response schemas must never expose any `*_encrypted` field.
 

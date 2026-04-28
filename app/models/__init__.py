@@ -3,7 +3,7 @@ from app.models.employer import Employer
 from app.models.member import Member
 from app.models.address import MemberAddress
 from app.models.contact import MemberContact
-from app.models.beneficiary import Beneficiary
+from app.models.beneficiary import Beneficiary, BeneficiaryBankAccount
 from app.models.employment import EmploymentRecord
 from app.models.salary import SalaryHistory
 from app.models.leave import LeaveType, LeaveBalance
@@ -30,4 +30,5 @@ __all__ = [
     "PayrollReport", "PayrollReportRow", "ContributionRecord",
     "MemberStatusHistory",
     "LeavePeriod",
+    "BeneficiaryBankAccount",
 ]

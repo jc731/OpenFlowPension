@@ -54,7 +54,7 @@ class Member(TimestampMixin, Base):
     plan_type: Mapped[PlanType | None] = relationship("PlanType", foreign_keys=[plan_type_id])
     addresses: Mapped[list[MemberAddress]] = relationship(back_populates="member")
     contacts: Mapped[list[MemberContact]] = relationship(back_populates="member")
-    beneficiaries: Mapped[list[Beneficiary]] = relationship(back_populates="member")
+    beneficiaries: Mapped[list[Beneficiary]] = relationship(back_populates="member", foreign_keys="[Beneficiary.member_id]")
     employment_records: Mapped[list[EmploymentRecord]] = relationship(back_populates="member")
     service_credit_entries: Mapped[list[ServiceCreditEntry]] = relationship(back_populates="member")
     bank_accounts: Mapped[list[MemberBankAccount]] = relationship(back_populates="member")
