@@ -13,6 +13,9 @@ from app.models.payment import BenefitPayment, PaymentDeduction, DeductionOrder,
 from app.models.payroll import PayrollReport, PayrollReportRow, ContributionRecord
 from app.models.member_status import MemberStatusHistory
 from app.models.leave_period import LeavePeriod
+from app.models.benefit_election import MemberBenefitElection
+from app.models.retirement_case import RetirementCase
+from app.models.api_key import ApiKey
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -31,4 +34,7 @@ __all__ = [
     "MemberStatusHistory",
     "LeavePeriod",
     "BeneficiaryBankAccount",
+    "MemberBenefitElection",
+    "RetirementCase",
+    "ApiKey",
 ]

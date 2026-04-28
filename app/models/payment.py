@@ -12,6 +12,7 @@ from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.bank_account import MemberBankAccount
+    from app.models.beneficiary import Beneficiary, BeneficiaryBankAccount
     from app.models.member import Member
 
 
@@ -28,6 +29,13 @@ class BenefitPayment(Base):
     member_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
     bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("member_bank_accounts.id"), nullable=True
+    )
+    # Set on survivor_annuity / death_benefit payments; null on annuity/refund payments
+    beneficiary_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("beneficiaries.id"), nullable=True
+    )
+    beneficiary_bank_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("beneficiary_bank_accounts.id"), nullable=True
     )
 
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
@@ -51,6 +59,10 @@ class BenefitPayment(Base):
 
     member: Mapped[Member] = relationship(back_populates="payments")
     bank_account: Mapped[MemberBankAccount | None] = relationship(back_populates="payments")
+    beneficiary: Mapped[Beneficiary | None] = relationship(foreign_keys=[beneficiary_id])
+    beneficiary_bank_account: Mapped[BeneficiaryBankAccount | None] = relationship(
+        foreign_keys=[beneficiary_bank_account_id]
+    )
     deductions: Mapped[list[PaymentDeduction]] = relationship(back_populates="payment")
 
 

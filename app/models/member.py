@@ -13,6 +13,7 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from app.models.address import MemberAddress
     from app.models.bank_account import MemberBankAccount
+    from app.models.benefit_election import MemberBenefitElection
     from app.models.beneficiary import Beneficiary
     from app.models.contact import MemberContact
     from app.models.employment import EmploymentRecord
@@ -62,3 +63,4 @@ class Member(TimestampMixin, Base):
     deduction_orders: Mapped[list[DeductionOrder]] = relationship(back_populates="member")
     tax_withholding_elections: Mapped[list[TaxWithholdingElection]] = relationship(back_populates="member")
     status_history: Mapped[list[MemberStatusHistory]] = relationship(back_populates="member", order_by="MemberStatusHistory.effective_date")
+    benefit_elections: Mapped[list[MemberBenefitElection]] = relationship(back_populates="member", order_by="MemberBenefitElection.effective_date")

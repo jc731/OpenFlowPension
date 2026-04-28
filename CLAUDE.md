@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, and DB-backed benefit estimate are built. Auth, frontend, and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, and API key auth are built. Keycloak JWT (human-user auth), frontend, and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -90,11 +90,13 @@ All routers depend on `get_current_user()` from `app/api/deps.py`. It returns a 
 | `benefit:calculate` | Call the stateless calculation endpoint |
 | `admin` | Everything |
 
-**Two auth paths are planned, handled by the same `get_current_user` dependency:**
-- **Keycloak JWT** — for human users (fund staff, admin UI). Not yet integrated.
-- **API keys** — for machine-to-machine (external systems, payroll integrations, employer portals). Not yet implemented. See `api_keys` in the backlog below.
+**Two auth paths are handled by the same `get_current_user` dependency:**
+- **API keys** — for machine-to-machine (external systems, payroll integrations, employer portals). Implemented. See API keys section below.
+- **Keycloak JWT** — for human users (fund staff, admin UI). Not yet integrated; will be wired into `deps.py` when the admin frontend ships.
 
-Routers must never check auth logic inline. When real auth ships, only `deps.py` changes — router signatures stay the same.
+Routers must never check auth logic inline. When Keycloak ships, only `deps.py` changes — router signatures stay the same.
+
+**Dev bypass:** When `environment=development` and no Authorization header is present, `get_current_user` returns a dev-admin stub with `scopes=["*"]`. This bypass is explicitly blocked in production (any non-development environment requires a valid Bearer token).
 
 ### Actuarial tables
 
@@ -107,14 +109,17 @@ Current tables (SURS 2024 Experience Review, effective 2024-07-02):
 
 When the fund's actuary publishes a new experience review, add new CSVs with the updated effective date. See `data/actuarial_tables/README.md` for the update process.
 
-### API keys (backlog — not yet implemented)
+### API keys
 
-API keys provide scoped machine access without Keycloak. When implemented:
+Machine-to-machine auth. `app/models/api_key.py`, `app/services/api_key_service.py`, `app/api/v1/routers/api_keys.py`.
 
-- `api_keys` table: `id`, `key_hash` (SHA-256, never store plaintext), `name`, `scopes: JSONB`, `created_at`, `expires_at`, `last_used_at`, `active: bool`
-- Key generation: endpoint returns the plaintext key once on creation, then only stores the hash
-- `get_current_user` checks the `Authorization: Bearer <key>` header, hashes it, looks up the `api_keys` row, validates active + not expired, returns the `Principal` with that row's scopes
-- Implement before any external system is given access
+Key format: `ofp_` prefix + 64 random hex chars. Only the SHA-256 hash is stored. The first 12 chars (`key_prefix`) are stored for display so staff can identify keys without the secret. The plaintext is returned once at creation/rotation and is not recoverable.
+
+`get_current_user` in `app/api/deps.py` handles validation: extracts the Bearer token, hashes it, looks up the `api_keys` row, checks `active` and `expires_at`, updates `last_used_at`, returns `Principal`.
+
+**Endpoints:** `POST /api/v1/api-keys`, `GET /api/v1/api-keys`, `GET /api/v1/api-keys/{id}`, `POST /api/v1/api-keys/{id}/revoke`, `POST /api/v1/api-keys/{id}/rotate`.
+
+**Scope enforcement** — the `Principal.scopes` list is populated from the key's JSONB scopes column and available to all routers, but per-endpoint scope gating is not yet enforced. Wire it in `deps.py` when the first external integration requires it.
 
 ### Benefit calculation engine
 
@@ -249,19 +254,34 @@ The current data model stores demographic information (name, DOB, SSN, contact) 
 
 **What to preserve:** `Beneficiary.linked_member_id` becomes `Beneficiary.party_id`. `Member` gets its own `party_id` FK. The bridge approach is designed to be a clean rename, not a rewrite.
 
-### Death and survivor benefit module (backlog — not yet implemented)
+### Death and survivor benefit module
 
-When a member dies, the system must:
-1. Set status to `deceased` via `contract_service.record_death()`
-2. Identify beneficiaries (primary first; contingent if primary has predeceased)
-3. Calculate the survivor benefit: survivor annuity (reversionary option or J&S election) or lump sum death benefit, per the member's elected option and plan rules
-4. Create `BenefitPayment` rows with `payment_type=death_benefit` or `payment_type=survivor_annuity`, routed to `BeneficiaryBankAccount`
+`app/services/survivor_service.py` — handles two scenarios:
 
-Service structure (proposed): `app/services/survivor_service.py`
-- `calculate_survivor_benefit(member_id, event_date, session)` → stateless calculation delegating to existing actuarial tables in `benefit/actuarial.py`
-- `initiate_survivor_payments(member_id, event_date, session)` → write path creating payments
+**Pre-retirement death** (member status != `annuitant`): lump-sum death benefit = sum of all non-voided `ContributionRecord.employee_contribution` rows. Creates a `BenefitPayment` with `payment_type=death_benefit`.
 
-Plan rules for lump sum amounts and continuation periods should live in `system_configurations` (same config service pattern). Defer until first fund goes live.
+**Post-retirement death** (member status == `annuitant`): driven by the member's `MemberBenefitElection` (most recent with `effective_date <= event_date`):
+- `single_life` → no survivor benefit, no payments created
+- `js_50 / js_75 / js_100` → survivor receives elected % of `member_monthly_annuity`
+- `reversionary` → survivor receives `reversionary_monthly_amount`
+
+Creates a `BenefitPayment` with `payment_type=survivor_annuity` routed to the beneficiary's primary `BeneficiaryBankAccount`.
+
+**Service functions:**
+- `record_election(member_id, option_type, ...)` — insert new `MemberBenefitElection`; new row supersedes old (same immutability pattern as salary history)
+- `get_current_election(member_id, session, as_of)` — latest election with `effective_date <= as_of`
+- `calculate_survivor_benefit(member_id, event_date, session)` → `SurvivorBenefitResult` (read-only)
+- `initiate_survivor_payments(member_id, event_date, session)` → `list[BenefitPayment]` (write path)
+
+**Routers:** `app/api/v1/routers/survivor.py`
+- `POST /members/{id}/benefit-elections`
+- `GET /members/{id}/benefit-elections/current`
+- `GET /members/{id}/survivor-benefit`
+- `POST /members/{id}/survivor-payments`
+
+**Model:** `app/models/benefit_election.py` — `MemberBenefitElection` table. `BenefitPayment` has two nullable FK columns: `beneficiary_id` and `beneficiary_bank_account_id` for routing post-retirement survivor payments.
+
+**What is not yet implemented:** Contingent beneficiary fallback (if primary beneficiary has predeceased); plan-configurable lump sum continuation periods. Defer until first fund goes live.
 
 ### Disability benefit module (backlog — deferred, high complexity)
 
@@ -354,6 +374,37 @@ Query params: `retirement_date` (required), `sick_leave_days` (default 0), `bene
 Raises 422 if member is missing certification date, plan choice, or salary history. Active members use `retirement_date` as their `termination_date`; terminated members use the most recent `termination_date` from their employment records.
 
 Service: `app/services/benefit_estimate_service.py`.
+
+### Retirement case module
+
+`app/services/retirement_service.py` — orchestrates the administrative workflow from termination to first annuity payment.
+
+**Status flow:** `draft → approved → active` (or `cancelled` from draft/approved).
+
+**Only one non-cancelled case per member** — the service enforces this.
+
+**Service functions:**
+- `create_case(member_id, retirement_date, ...)` — validates member is not already an annuitant or deceased; runs the benefit estimate; stores the full `BenefitCalculationResult` as JSONB in `calculation_snapshot`; status=draft
+- `recalculate(case_id, session)` — re-runs the estimate and updates the snapshot; draft only
+- `approve_case(case_id, session, approved_by)` — locks the calculation; calls `survivor_service.record_election()` with the elected option; calls `contract_service.begin_annuity()` to transition member status to `annuitant`; denormalizes `final_monthly_annuity` from the snapshot; status=approved
+- `activate_case(case_id, first_payment_date, session, ...)` — creates a `BenefitPayment` with `payment_type=annuity` from the approved `final_monthly_annuity`; stores `first_payment_id`; status=active
+- `cancel_case(case_id, session, ...)` — sets status=cancelled; blocked once active
+
+**Key design decisions:**
+- The `calculation_snapshot` is the permanent record of what staff reviewed and approved. It is serialized via `BenefitCalculationResult.model_dump(mode='json')` and stored as JSONB.
+- `final_monthly_annuity` is denormalized from the snapshot at approval for fast reads and payment creation — it is immutable after approval.
+- Approval is the point of no return: it writes the benefit election and transitions member status to annuitant in a single transaction. Cancelling after approval is permitted (if first payment has not been created) but requires re-opening a new case if re-processing is needed.
+
+**Routers:** `app/api/v1/routers/retirement.py`
+- `POST /members/{id}/retirement-cases` — create
+- `GET /members/{id}/retirement-cases` — list all cases for member
+- `GET /retirement-cases/{id}` — get single case
+- `POST /retirement-cases/{id}/recalculate` — refresh snapshot (draft only)
+- `POST /retirement-cases/{id}/approve` — lock and transition
+- `POST /retirement-cases/{id}/activate` — create first payment
+- `POST /retirement-cases/{id}/cancel` — cancel
+
+**Model:** `app/models/retirement_case.py` — `RetirementCase` table (uses `TimestampMixin` for id/created_at/updated_at).
 
 ### Config service pattern
 
