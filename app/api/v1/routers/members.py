@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, get_current_user
 from app.database import get_session
+from app.schemas.benefit import BenefitCalculationResult, BenefitOptionRequest
 from app.schemas.member import MemberCreate, MemberRead
-from app.services import member_service, plan_choice_service
+from app.services import benefit_estimate_service, member_service, plan_choice_service
 
 router = APIRouter(prefix="/members", tags=["members"])
 
@@ -66,5 +67,30 @@ async def lock_plan_choice(
     try:
         async with session.begin():
             return await plan_choice_service.lock_plan_choice(member_id, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/{member_id}/benefit-estimate", response_model=BenefitCalculationResult)
+async def get_benefit_estimate(
+    member_id: uuid.UUID,
+    retirement_date: date,
+    sick_leave_days: int = 0,
+    benefit_option_type: str = "single_life",
+    beneficiary_age: int | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    option = BenefitOptionRequest(
+        option_type=benefit_option_type,
+        beneficiary_age=beneficiary_age,
+    )
+    try:
+        return await benefit_estimate_service.get_estimate(
+            member_id,
+            retirement_date,
+            session,
+            sick_leave_days=sick_leave_days,
+            benefit_option=option,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
