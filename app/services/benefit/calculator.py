@@ -253,6 +253,8 @@ def calculate_benefit(
         aai_basis,
         tier_i_cola_type=cfg.cola_tier_i_type,
         tier_ii_deferral_age=cfg.cola_tier_ii_deferral_age,
+        increase_month=cfg.cola_increase_month,
+        increase_day=cfg.cola_increase_day,
     )
     aai_result = AaiResult(
         rate_type=rate_type,

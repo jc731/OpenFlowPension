@@ -13,13 +13,16 @@ from typing import Literal
 from app.services.benefit.eligibility import age_years_months
 
 _DEFAULT_TIER_II_DEFERRAL_AGE = 67
+_DEFAULT_INCREASE_MONTH = 1
+_DEFAULT_INCREASE_DAY = 1
 
 
-def _next_january_1(d: date) -> date:
-    """January 1 of the year following d (or same Jan 1 if d is already Jan 1)."""
-    if d.month == 1 and d.day == 1:
-        return d
-    return date(d.year + 1, 1, 1)
+def _next_period_start(d: date, month: int = 1, day: int = 1) -> date:
+    """First occurrence of month/day on or after d (same day if d already lands on it)."""
+    target_this_year = date(d.year, month, day)
+    if d <= target_this_year:
+        return target_this_year
+    return date(d.year + 1, month, day)
 
 
 def compute_aai(
@@ -30,10 +33,12 @@ def compute_aai(
     *,
     tier_i_cola_type: Literal["3pct_compound", "3pct_simple"] = "3pct_compound",
     tier_ii_deferral_age: int = _DEFAULT_TIER_II_DEFERRAL_AGE,
+    increase_month: int = _DEFAULT_INCREASE_MONTH,
+    increase_day: int = _DEFAULT_INCREASE_DAY,
 ) -> tuple[Literal["3pct_compound", "3pct_simple", "cpi_u_half"], date, Decimal]:
     """Return (rate_type, first_increase_date, basis_amount)."""
     if tier == "I":
-        first_increase = _next_january_1(retirement_date)
+        first_increase = _next_period_start(retirement_date, increase_month, increase_day)
         return tier_i_cola_type, first_increase, basis_amount
 
     # Tier II — later of deferral_age or first anniversary of annuity start
@@ -43,9 +48,9 @@ def compute_aai(
         retirement_date.day,
     )
 
-    age_67_date = date(birth_date.year + tier_ii_deferral_age, birth_date.month, birth_date.day)
+    age_deferral_date = date(birth_date.year + tier_ii_deferral_age, birth_date.month, birth_date.day)
 
-    later = max(first_anniversary, age_67_date)
-    first_increase = _next_january_1(later)
+    later = max(first_anniversary, age_deferral_date)
+    first_increase = _next_period_start(later, increase_month, increase_day)
 
     return "cpi_u_half", first_increase, basis_amount

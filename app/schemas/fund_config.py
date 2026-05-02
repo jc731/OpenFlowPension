@@ -105,6 +105,10 @@ class FundConfig(BaseModel):
     # SURS Tier II: half CPI.  IMRF Tier II: half CPI.  Deferral age differs (both 67).
     cola_tier_ii_type: Literal["half_cpi"] = "half_cpi"
     cola_tier_ii_deferral_age: int = 67
+    # First increase date: SURS uses January 1 (calendar year).
+    # Funds applying COLA on their fiscal year start (e.g. July 1) override these.
+    cola_increase_month: int = 1
+    cola_increase_day: int = 1
 
     # ── Sick Leave Conversion ─────────────────────────────────────────────────
     # SURS: step_table (20/60/120/180 days → 0.25/0.5/0.75/1.0 yrs), 60-day gap.

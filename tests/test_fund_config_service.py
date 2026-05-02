@@ -246,6 +246,27 @@ def test_aai_custom_deferral_age_tier_ii():
     assert first_date == date(2035, 1, 1)
 
 
+def test_aai_fiscal_year_cola_increase():
+    # Fund applies COLA on July 1 instead of January 1
+    rate_type, first_date, basis = compute_aai(
+        "I", date(2024, 3, 15), date(1964, 3, 15), Decimal("3000"),
+        increase_month=7,
+        increase_day=1,
+    )
+    assert rate_type == "3pct_compound"
+    assert first_date == date(2024, 7, 1)  # next July 1 on/after retirement date
+
+
+def test_aai_fiscal_year_cola_already_on_increase_date():
+    # Retires exactly on July 1 — first increase is that same July 1
+    rate_type, first_date, basis = compute_aai(
+        "I", date(2024, 7, 1), date(1964, 7, 1), Decimal("3000"),
+        increase_month=7,
+        increase_day=1,
+    )
+    assert first_date == date(2024, 7, 1)
+
+
 # ---------------------------------------------------------------------------
 # Parameterized sick leave — proportional method
 # ---------------------------------------------------------------------------
