@@ -46,27 +46,166 @@ We plan to have the best people. That's the whole pitch.
 
 | Layer | Technology |
 |---|---|
-| API / backend | Python + FastAPI |
-| Database | PostgreSQL |
-| Portal frontend | Astro + React |
-| Admin UI | React |
+| API / backend | Python 3.12+ + FastAPI |
+| Database | PostgreSQL 16 |
+| Admin / LOB frontend | React + Vite + TypeScript + Tailwind v4 + shadcn/ui |
+| Member portal frontend | Not yet started |
 | Background jobs | Celery + Redis |
-| Document generation | WeasyPrint |
-| Auth | Keycloak |
-| Actuarial / numerical | NumPy / pandas |
+| Document generation | WeasyPrint (deferred) |
+| Auth | Keycloak (JWT, deferred) + API keys (built) |
+| Actuarial / numerical | Pure Python (NumPy / pandas deferred) |
 
 ---
 
 ## Getting started
 
+**Prerequisites:** Docker, Docker Compose, Node.js 20+, pnpm.
+
 ```bash
-git clone https://github.com/[org]/openflow-pension
-cd openflow-pension
+git clone https://github.com/jc731/OpenFlowPension
+cd OpenFlowPension
 cp .env.example .env
-docker compose up
+make up        # start postgres, redis, api containers
+make migrate   # run alembic migrations
+make seed      # load the Jane Smith demo scenario (see below)
 ```
 
-See `docs/setup.md` for environment configuration, database initialization, and first-run checklist.
+The API is now running at `http://localhost:8000`.  
+Interactive docs: `http://localhost:8000/docs`
+
+To start the admin frontend:
+
+```bash
+cd frontend/admin
+pnpm install
+pnpm dev       # → http://localhost:5173
+```
+
+---
+
+## First-run walkthrough
+
+This section walks through a complete scenario using the seeded demo data so you can see the system end-to-end without needing a real member record. No auth header is needed in development — the backend applies a dev-admin bypass automatically.
+
+### The scenario
+
+`make seed` loads **Jane Smith** — a 25-year Tier I Traditional member at State University of Illinois. The seed covers:
+
+- Member record with certification date, plan choice (Tier I / Traditional), and beneficiary (spouse Robert Smith)
+- 25 years of employment + salary history
+- Service credit entries spanning both accrual rule periods (pre- and post-September 2024)
+- System configuration keys: accrual rules, employment types, leave types
+
+---
+
+### 1 — Explore the API directly
+
+Open `http://localhost:8000/docs` for the interactive Swagger UI. Every endpoint is exercisable from there without any tooling.
+
+**List members:**
+```
+GET /api/v1/members
+```
+
+**Get Jane's member record** (grab her `id` from the list):
+```
+GET /api/v1/members/{id}
+```
+
+**Run a benefit estimate** (retirement date is configurable):
+```
+GET /api/v1/members/{id}/benefit-estimate?retirement_date=2025-01-15
+```
+
+The response includes Final Average Earnings, total service credit, selected formula (General Formula vs Money Purchase), the computed monthly annuity, AAI start date, and the HB2616 minimum floor check. It reflects the full 15-step calculation decision tree.
+
+**Stateless calculation** (no member record lookup — pass all inputs directly):
+```
+POST /api/v1/calculate/benefit
+```
+This endpoint is useful for "what-if" estimates and employer-portal integrations. The request body mirrors `BenefitCalculationRequest` in `app/schemas/benefit.py`.
+
+---
+
+### 2 — Admin frontend
+
+Navigate to `http://localhost:5173` after running `pnpm dev` in `frontend/admin/`.
+
+**Members → Jane Smith**
+
+The member detail page shows employment history, salary history, and a benefit estimate form. Enter a retirement date and click Calculate to see the full estimate inline.
+
+**Retirement Cases**
+
+The retirement case workflow demonstrates the approval pipeline:
+1. Open a case from the member detail page
+2. The system snapshots the benefit calculation at case creation
+3. Approve — this locks the calculation, records the benefit election, and transitions Jane's status to `annuitant`
+4. Activate — create the first payment record
+
+**Payroll Reports**
+
+Upload a CSV payroll report for Jane's employer. Required columns:
+
+```
+member_number,period_start,period_end,gross_earnings,employee_contribution,employer_contribution,days_worked
+```
+
+Example row:
+```
+J-00001,2025-01-01,2025-01-31,7500.00,675.00,1125.00,21
+```
+
+After upload the report detail page shows each row's status — `applied`, `skipped` (duplicate), or `error` (member not found, no active employment, missing accrual config). Applied rows write a `ServiceCreditEntry` and a `ContributionRecord` to the ledger.
+
+**API Keys**
+
+The API Keys page lets you create machine-to-machine keys for payroll integrations and employer portal access. The plaintext key is shown once at creation. Keys use the `ofp_` prefix and store only a SHA-256 hash — they are not recoverable.
+
+---
+
+### 3 — System configuration
+
+All fund-specific rules live in the `system_configurations` table as JSONB, looked up by effective date. The seed populates:
+
+| Key | What it controls |
+|---|---|
+| `service_credit_accrual_rule` | How service credit is computed — `monthly_floor` (post-2024) or `proportional_percent_time` (pre-2024) |
+| `employment_types` | Whitelist of valid employment type strings |
+| `leave_types` | Whitelist of valid leave type strings |
+| `fund_calculation_config` | All benefit calculation parameters (tier cutoffs, FAE windows, formula bands, cap tables, COLA rules) |
+
+To inspect current config values:
+```
+GET /api/v1/system-configurations
+```
+
+Adding a new effective-dated rule (example: switch accrual rule):
+```
+POST /api/v1/system-configurations
+{
+  "key": "service_credit_accrual_rule",
+  "config_value": {"rule": "monthly_floor"},
+  "effective_date": "2024-09-01"
+}
+```
+
+The calculation engine picks up the most recent config row with `effective_date <= the date being evaluated` — no code changes needed.
+
+---
+
+### 4 — What to configure for a real fund
+
+Before running production data, a fund will need to:
+
+1. **Replace actuarial tables** — CSVs in `data/actuarial_tables/` ship with SURS 2024 Experience Review factors. Swap in your fund's tables.
+2. **Seed `fund_calculation_config`** — override only the parameters that differ from SURS defaults. See `app/schemas/fund_config.py` for the full list.
+3. **Seed `service_credit_accrual_rule`** — with your fund's rule and effective date(s).
+4. **Seed employer records** — one row per contributing employer in `employers`.
+5. **Configure `employment_types` and `leave_types`** — match your fund's classifications.
+6. **Wire Keycloak** — human-user auth is not yet integrated. The dev bypass must not be used in production.
+
+Fund-specific calculation customization is designed to be configuration, not code: adding a second fund means seeding a new `fund_calculation_config` row with overrides, not forking the engine.
 
 ---
 
@@ -74,7 +213,7 @@ See `docs/setup.md` for environment configuration, database initialization, and 
 
 OpenFlow is designed to be extended. Addons are independently licensed modules — commercial or open — that integrate with the core platform via the addon API. Examples include state-specific reporting formats, integration adapters for payroll vendors, actuarial data import pipelines, and custom portal themes.
 
-Building and selling addons is explicitly permitted under the license. See `docs/addon-api.md`.
+Building and selling addons is explicitly permitted under the license.
 
 ---
 
@@ -96,7 +235,7 @@ Contributions are welcome. Before opening a pull request on a significant featur
 
 ## Status
 
-Early development. Core data model and benefit calculation engine are the current focus. Not production-ready.
+Early development. Core data model, benefit calculation engine, payroll ingestion, payment disbursement, retirement case workflow, and admin/LOB frontend scaffolding are built. Keycloak JWT auth, member portal, and document generation are not yet started. Not production-ready.
 
 ---
 
