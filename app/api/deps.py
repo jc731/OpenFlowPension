@@ -2,13 +2,17 @@ from typing import TypedDict
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.jwt import decode_token, extract_scopes
 from app.config import settings
 from app.database import get_session
 from app.services import api_key_service
 
 _bearer = HTTPBearer(auto_error=False)
+
+_API_KEY_PREFIX = "ofp_"
 
 
 class Principal(TypedDict):
@@ -22,31 +26,54 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     session: AsyncSession = Depends(get_session),
 ) -> Principal:
-    """Validate the incoming request and return the caller's Principal.
+    """Resolve the caller's identity.
 
-    Auth paths:
-      1. Bearer <api_key> — hashed and looked up in the api_keys table.
-      2. No header + environment=development — returns the admin dev stub.
-         This bypass is explicitly disabled in production.
-
-    Keycloak JWT validation will be wired here when human-user auth ships.
-    The Principal shape (id, principal_type, scopes) does not change.
+    Resolution order:
+      1. Bearer ofp_… — API key, hashed and looked up in api_keys table.
+      2. Bearer <jwt> — Keycloak JWT; requires KEYCLOAK_URL to be configured.
+      3. No header + environment=development — dev-admin stub (never in production).
     """
     if credentials is not None:
-        key_row = await api_key_service.validate_key(credentials.credentials, session)
-        if key_row is None:
+        token = credentials.credentials
+
+        if token.startswith(_API_KEY_PREFIX):
+            key_row = await api_key_service.validate_key(token, session)
+            if key_row is None:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid or expired API key",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return Principal(
+                id=str(key_row.id),
+                principal_type="api_key",
+                scopes=list(key_row.scopes),
+            )
+
+        # Not an API key — treat as a JWT
+        if not settings.keycloak_url:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid or expired API key",
+                detail="JWT authentication is not configured on this server",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        try:
+            payload = await decode_token(token)
+        except InvalidTokenError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid token: {exc}",
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+            ) from exc
+
         return Principal(
-            id=str(key_row.id),
-            principal_type="api_key",
-            scopes=list(key_row.scopes),
+            id=payload.get("sub", ""),
+            principal_type="user",
+            scopes=extract_scopes(payload),
         )
 
-    # No credentials supplied
+    # No credentials
     if settings.environment == "development":
         return Principal(id="dev-admin", principal_type="user", scopes=["*"])
 

@@ -1,0 +1,75 @@
+{
+  "realm": "openflow",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "bruteForceProtected": false,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [
+      { "name": "admin",                "description": "Full access to all OpenFlow operations", "composite": false, "clientRole": false },
+      { "name": "member:read",          "description": "View member records",                    "composite": false, "clientRole": false },
+      { "name": "member:write",         "description": "Create and update member records",       "composite": false, "clientRole": false },
+      { "name": "employment:write",     "description": "Manage employment records",              "composite": false, "clientRole": false },
+      { "name": "service_credit:write", "description": "Post service credit",                   "composite": false, "clientRole": false },
+      { "name": "payroll:write",        "description": "Submit payroll reports",                "composite": false, "clientRole": false },
+      { "name": "benefit:calculate",    "description": "Run benefit calculations",              "composite": false, "clientRole": false }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "openflow-admin",
+      "name": "OpenFlow Admin Portal",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:8000/*"
+      ],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "web-origins", "acr", "roles", "profile", "basic", "email"
+      ],
+      "optionalClientScopes": [
+        "address", "phone", "offline_access", "microprofile-jwt"
+      ],
+      "protocolMappers": [
+        {
+          "name": "openflow-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "openflow-admin",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@openflow.local",
+      "firstName": "OpenFlow",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    }
+  ]
+}

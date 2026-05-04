@@ -45,5 +45,19 @@ services:
       redis:
         condition: service_healthy
 
+  # Keycloak — only started with: docker compose --profile auth up
+  # Imports the dev realm from keycloak/realm-export.json on first start.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26
+    command: start-dev --import-realm
+    profiles: [auth]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+    ports:
+      - "8080:8080"
+
 volumes:
   postgres_data:

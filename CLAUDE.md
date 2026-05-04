@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, and admin/LOB frontend scaffolding are built. Keycloak JWT (human-user auth), member portal frontend, and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, Keycloak JWT auth, and admin/LOB frontend scaffolding are built. Member portal frontend and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -49,7 +49,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | Testing | pytest + pytest-asyncio |
 | Encryption | `cryptography` (Fernet) — app-level SSN encryption |
 | Schemas | Pydantic v2 |
-| Auth | Keycloak (user auth, not yet integrated) + API keys (machine auth, built) |
+| Auth | Keycloak JWT (built) + API keys (built) |
 | Admin/LOB frontend | React + Vite + TypeScript + Tailwind v4 + shadcn/ui (`frontend/admin/`) |
 | Member portal frontend | Not yet started |
 | Document generation / forms | WeasyPrint (not yet started) |
@@ -92,12 +92,20 @@ All routers depend on `get_current_user()` from `app/api/deps.py`. It returns a 
 | `admin` | Everything |
 
 **Two auth paths are handled by the same `get_current_user` dependency:**
-- **API keys** — for machine-to-machine (external systems, payroll integrations, employer portals). Implemented. See API keys section below.
-- **Keycloak JWT** — for human users (fund staff, admin UI). Not yet integrated; will be wired into `deps.py` when the admin frontend ships.
+- **API keys** — for machine-to-machine (external systems, payroll integrations, employer portals). Implemented. Keys use the `ofp_` prefix; `deps.py` routes tokens starting with `ofp_` to the API key lookup path.
+- **Keycloak JWT** — for human users (fund staff, admin UI). Implemented. `deps.py` routes non-`ofp_` tokens to `app/auth/jwt.py` for JWKS-backed RS256 validation. Requires `KEYCLOAK_URL` to be set; returns 401 with a clear message if Keycloak is not configured.
 
-Routers must never check auth logic inline. When Keycloak ships, only `deps.py` changes — router signatures stay the same.
+Routers must never check auth logic inline — only `deps.py` handles auth.
 
-**Dev bypass:** When `environment=development` and no Authorization header is present, `get_current_user` returns a dev-admin stub with `scopes=["*"]`. This bypass is explicitly blocked in production (any non-development environment requires a valid Bearer token).
+**Dev bypass:** When `environment=development` and no Authorization header is present, `get_current_user` returns a dev-admin stub with `scopes=["*"]`. This bypass is explicitly blocked in production (any non-development environment without a valid Bearer token gets 401).
+
+**JWT validation** (`app/auth/jwt.py`):
+- JWKS fetched from `{keycloak_url}/realms/{keycloak_realm}/protocol/openid-connect/certs`
+- Keys cached in-process for 5 minutes (TTL); unknown `kid` triggers a one-shot refresh (handles key rotation)
+- RS256 only; issuer and audience validated when `KEYCLOAK_AUDIENCE` is set
+- Scopes extracted from `realm_access.roles` and `resource_access.*.roles` in the payload; `"admin"` role maps to `["*"]`
+
+**Keycloak dev setup:** Run `docker compose --profile auth up` to start Keycloak alongside the API. The realm is imported from `keycloak/realm-export.json` on startup. Dev credentials: username `admin`, password `admin`, realm `openflow`. The `openflow-admin` client is pre-configured as a public PKCE client pointed at `localhost:5173`.
 
 ### Actuarial tables
 

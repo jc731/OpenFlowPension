@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, FileText,
-  Receipt, Settings, KeyRound, ChevronRight,
+  Receipt, Settings, KeyRound, ChevronRight, LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
@@ -40,7 +40,17 @@ function NavItem({ to, icon: Icon, label, end }: { to: string; icon: React.Eleme
   )
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  displayName?: string
+  email?: string
+  onLogout?: () => void
+}
+
+export function Sidebar({ displayName, email, onLogout }: SidebarProps = {}) {
+  const initials = displayName
+    ? displayName.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()
+    : 'FA'
+
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r bg-sidebar">
       {/* Branding */}
@@ -63,16 +73,25 @@ export function Sidebar() {
         {adminNav.map((item) => <NavItem key={item.to} {...item} />)}
       </nav>
 
-      {/* Footer */}
+      {/* User footer */}
       <div className="border-t p-3">
         <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-            FA
+          <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary shrink-0">
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-sidebar-foreground truncate">Fund Admin</p>
-            <p className="text-xs text-muted-foreground truncate">Development</p>
+            <p className="text-xs font-medium text-sidebar-foreground truncate">{displayName ?? 'Fund Admin'}</p>
+            <p className="text-xs text-muted-foreground truncate">{email ?? 'Development'}</p>
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </aside>
