@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import TypedDict
 
 from fastapi import Depends, HTTPException, Request
@@ -19,6 +20,25 @@ class Principal(TypedDict):
     id: str
     principal_type: str  # 'user' | 'api_key'
     scopes: list[str]
+
+
+def require_scope(*scopes: str) -> Callable:
+    """Return a FastAPI dependency that enforces at least one of the given scopes.
+
+    Usage — when the principal is needed in the handler:
+        principal: Principal = Depends(require_scope("member:write"))
+
+    Usage — when the principal is not needed (read-only endpoints):
+        @router.get("/", dependencies=[Depends(require_scope("member:read"))])
+    """
+    async def _check(principal: Principal = Depends(get_current_user)) -> Principal:
+        if "*" in principal["scopes"] or any(s in principal["scopes"] for s in scopes):
+            return principal
+        raise HTTPException(
+            status_code=403,
+            detail=f"Insufficient permissions. Required: {' or '.join(scopes)}",
+        )
+    return _check
 
 
 async def get_current_user(

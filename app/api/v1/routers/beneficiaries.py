@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.services import beneficiary_service
 
@@ -84,7 +84,7 @@ class BeneficiaryBankAccountRead(BaseModel):
 # Beneficiary designation endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/members/{member_id}/beneficiaries", response_model=list[BeneficiaryRead])
+@router.get("/members/{member_id}/beneficiaries", response_model=list[BeneficiaryRead], dependencies=[Depends(require_scope("member:read"))])
 async def list_beneficiaries(
     member_id: uuid.UUID,
     active_only: bool = False,
@@ -101,7 +101,7 @@ async def add_beneficiary(
     member_id: uuid.UUID,
     data: BeneficiaryCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -124,7 +124,8 @@ async def add_beneficiary(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.get("/beneficiaries/{beneficiary_id}", response_model=BeneficiaryRead)
+@router.get("/beneficiaries/{beneficiary_id}", response_model=BeneficiaryRead,
+            dependencies=[Depends(require_scope("member:read"))])
 async def get_beneficiary(
     beneficiary_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -144,7 +145,7 @@ async def close_beneficiary(
     beneficiary_id: uuid.UUID,
     data: BeneficiaryCloseRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -159,7 +160,8 @@ async def close_beneficiary(
 # Beneficiary bank account endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/beneficiaries/{beneficiary_id}/bank-accounts", response_model=list[BeneficiaryBankAccountRead])
+@router.get("/beneficiaries/{beneficiary_id}/bank-accounts", response_model=list[BeneficiaryBankAccountRead],
+            dependencies=[Depends(require_scope("member:read"))])
 async def list_bank_accounts(
     beneficiary_id: uuid.UUID,
     active_only: bool = False,
@@ -173,7 +175,7 @@ async def add_bank_account(
     beneficiary_id: uuid.UUID,
     data: BeneficiaryBankAccountCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -197,7 +199,7 @@ async def set_primary(
     beneficiary_id: uuid.UUID,
     account_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -212,7 +214,7 @@ async def close_bank_account(
     account_id: uuid.UUID,
     end_date: date,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():

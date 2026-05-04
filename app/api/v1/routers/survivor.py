@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.services import survivor_service
 
@@ -95,7 +95,7 @@ async def create_benefit_election(
     member_id: uuid.UUID,
     body: BenefitElectionCreate,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         election = await survivor_service.record_election(
@@ -124,7 +124,7 @@ async def get_current_election(
     member_id: uuid.UUID,
     as_of: date | None = None,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:read")),
 ):
     election = await survivor_service.get_current_election(member_id, session, as_of=as_of)
     if election is None:
@@ -140,7 +140,7 @@ async def get_survivor_benefit(
     member_id: uuid.UUID,
     event_date: date,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:read")),
 ):
     try:
         result = await survivor_service.calculate_survivor_benefit(
@@ -169,7 +169,7 @@ async def initiate_survivor_payments(
     member_id: uuid.UUID,
     body: SurvivorPaymentRequest,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         payments = await survivor_service.initiate_survivor_payments(

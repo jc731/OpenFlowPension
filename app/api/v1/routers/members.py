@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.schemas.benefit import BenefitCalculationResult, BenefitOptionRequest
 from app.schemas.member import MemberCreate, MemberRead
@@ -20,12 +20,12 @@ class PlanChoiceCreate(BaseModel):
     choice_date: date
 
 
-@router.get("/", response_model=list[MemberRead])
+@router.get("/", response_model=list[MemberRead], dependencies=[Depends(require_scope("member:read"))])
 async def list_members(session: AsyncSession = Depends(get_session)):
     return await member_service.list_members(session)
 
 
-@router.get("/{member_id}", response_model=MemberRead)
+@router.get("/{member_id}", response_model=MemberRead, dependencies=[Depends(require_scope("member:read"))])
 async def get_member(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     member = await member_service.get_member(member_id, session)
     if not member:
@@ -37,7 +37,7 @@ async def get_member(member_id: uuid.UUID, session: AsyncSession = Depends(get_s
 async def create_member(
     data: MemberCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     return await member_service.create_member(data, session)
 
@@ -47,7 +47,7 @@ async def set_plan_choice(
     member_id: uuid.UUID,
     data: PlanChoiceCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -62,7 +62,7 @@ async def set_plan_choice(
 async def lock_plan_choice(
     member_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -71,7 +71,8 @@ async def lock_plan_choice(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.get("/{member_id}/benefit-estimate", response_model=BenefitCalculationResult)
+@router.get("/{member_id}/benefit-estimate", response_model=BenefitCalculationResult,
+            dependencies=[Depends(require_scope("member:read"))])
 async def get_benefit_estimate(
     member_id: uuid.UUID,
     retirement_date: date,

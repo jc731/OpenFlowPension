@@ -1,9 +1,10 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.schemas.payment import (
     DeductionOrderCreate,
@@ -22,7 +23,8 @@ router = APIRouter(tags=["payments"])
 
 # ── Payments ───────────────────────────────────────────────────────────────────
 
-@router.get("/members/{member_id}/payments", response_model=list[PaymentRead])
+@router.get("/members/{member_id}/payments", response_model=list[PaymentRead],
+            dependencies=[Depends(require_scope("member:read"))])
 async def list_payments(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     return await payment_service.list_payments(member_id, session)
 
@@ -32,13 +34,14 @@ async def create_payment(
     member_id: uuid.UUID,
     data: PaymentCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     async with session.begin():
         return await payment_service.create_payment(member_id, data, session)
 
 
-@router.get("/payments/{payment_id}", response_model=PaymentRead)
+@router.get("/payments/{payment_id}", response_model=PaymentRead,
+            dependencies=[Depends(require_scope("member:read"))])
 async def get_payment(payment_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     payment = await payment_service.get_payment(payment_id, session)
     if not payment:
@@ -51,11 +54,11 @@ async def update_payment_status(
     payment_id: uuid.UUID,
     data: PaymentStatusUpdate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
-            payment = await payment_service.update_payment_status(payment_id, data, session)
+            await payment_service.update_payment_status(payment_id, data, session)
         return await payment_service.get_payment(payment_id, session)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -63,13 +66,13 @@ async def update_payment_status(
 
 # ── Deduction orders ───────────────────────────────────────────────────────────
 
-@router.get("/members/{member_id}/deduction-orders", response_model=list[DeductionOrderRead])
+@router.get("/members/{member_id}/deduction-orders", response_model=list[DeductionOrderRead],
+            dependencies=[Depends(require_scope("member:read"))])
 async def list_deduction_orders(
     member_id: uuid.UUID,
     active_only: bool = False,
     session: AsyncSession = Depends(get_session),
 ):
-    from datetime import date
     as_of = date.today() if active_only else None
     return await payment_service.list_deduction_orders(member_id, session, active_only=active_only, as_of=as_of)
 
@@ -79,7 +82,7 @@ async def create_deduction_order(
     member_id: uuid.UUID,
     data: DeductionOrderCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     async with session.begin():
         return await payment_service.create_deduction_order(member_id, data, session)
@@ -91,7 +94,7 @@ async def end_deduction_order(
     order_id: uuid.UUID,
     data: DeductionOrderEnd,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     try:
         async with session.begin():
@@ -102,7 +105,8 @@ async def end_deduction_order(
 
 # ── Tax withholding elections ──────────────────────────────────────────────────
 
-@router.get("/members/{member_id}/tax-withholding", response_model=list[TaxWithholdingElectionRead])
+@router.get("/members/{member_id}/tax-withholding", response_model=list[TaxWithholdingElectionRead],
+            dependencies=[Depends(require_scope("member:read"))])
 async def list_tax_withholding(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     return await payment_service.list_tax_withholding_elections(member_id, session)
 
@@ -112,7 +116,7 @@ async def set_tax_withholding(
     member_id: uuid.UUID,
     data: TaxWithholdingElectionCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    _: Principal = Depends(require_scope("member:write")),
 ):
     async with session.begin():
         return await payment_service.set_tax_withholding(member_id, data, session)

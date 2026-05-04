@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.services import api_key_service
 
@@ -62,7 +62,7 @@ class ApiKeyCreated(ApiKeyRead):
 async def create_api_key(
     body: ApiKeyCreate,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("admin")),
 ):
     try:
         row, plaintext = await api_key_service.create_key(
@@ -95,7 +95,7 @@ async def create_api_key(
 async def list_api_keys(
     include_revoked: bool = False,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("admin")),
 ):
     return await api_key_service.list_keys(session, include_revoked=include_revoked)
 
@@ -104,7 +104,7 @@ async def list_api_keys(
 async def get_api_key(
     key_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("admin")),
 ):
     try:
         return await api_key_service.get_key(key_id, session)
@@ -116,7 +116,7 @@ async def get_api_key(
 async def revoke_api_key(
     key_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("admin")),
 ):
     try:
         row = await api_key_service.revoke_key(key_id, session)
@@ -130,7 +130,7 @@ async def revoke_api_key(
 async def rotate_api_key(
     key_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("admin")),
 ):
     try:
         row, plaintext = await api_key_service.rotate_key(key_id, session)

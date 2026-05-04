@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.services import retirement_service
 
@@ -97,7 +97,7 @@ async def create_retirement_case(
     member_id: uuid.UUID,
     body: RetirementCaseCreate,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         case = await retirement_service.create_case(
@@ -121,11 +121,11 @@ async def create_retirement_case(
 @router.get(
     "/members/{member_id}/retirement-cases",
     response_model=list[RetirementCaseRead],
+    dependencies=[Depends(require_scope("member:read"))],
 )
 async def list_retirement_cases(
     member_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
 ):
     return await retirement_service.list_cases(member_id, session)
 
@@ -133,11 +133,11 @@ async def list_retirement_cases(
 @router.get(
     "/retirement-cases/{case_id}",
     response_model=RetirementCaseRead,
+    dependencies=[Depends(require_scope("member:read"))],
 )
 async def get_retirement_case(
     case_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
 ):
     try:
         return await retirement_service.get_case(case_id, session)
@@ -152,7 +152,7 @@ async def get_retirement_case(
 async def recalculate_retirement_case(
     case_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         case = await retirement_service.recalculate(case_id, session)
@@ -169,7 +169,7 @@ async def recalculate_retirement_case(
 async def approve_retirement_case(
     case_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         case = await retirement_service.approve_case(
@@ -191,7 +191,7 @@ async def activate_retirement_case(
     case_id: uuid.UUID,
     body: ActivateRequest,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         case = await retirement_service.activate_case(
@@ -216,7 +216,7 @@ async def cancel_retirement_case(
     case_id: uuid.UUID,
     body: CancelRequest,
     session: AsyncSession = Depends(get_session),
-    principal: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("member:write")),
 ):
     try:
         case = await retirement_service.cancel_case(

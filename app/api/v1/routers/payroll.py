@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, get_current_user
+from app.api.deps import Principal, require_scope
 from app.database import get_session
 from app.schemas.payroll import PayrollReportCreate, PayrollReportRead
 from app.services import payroll_service
@@ -11,7 +11,8 @@ from app.services import payroll_service
 router = APIRouter(tags=["payroll"])
 
 
-@router.get("/payroll-reports", response_model=list[PayrollReportRead])
+@router.get("/payroll-reports", response_model=list[PayrollReportRead],
+            dependencies=[Depends(require_scope("member:read", "payroll:write"))])
 async def list_all_payroll_reports(
     employer_id: uuid.UUID | None = None,
     limit: int = 100,
@@ -21,7 +22,8 @@ async def list_all_payroll_reports(
     return await payroll_service.list_all_payroll_reports(session, employer_id=employer_id, limit=limit)
 
 
-@router.get("/employers/{employer_id}/payroll-reports", response_model=list[PayrollReportRead])
+@router.get("/employers/{employer_id}/payroll-reports", response_model=list[PayrollReportRead],
+            dependencies=[Depends(require_scope("member:read", "payroll:write"))])
 async def list_payroll_reports(
     employer_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
@@ -34,10 +36,10 @@ async def ingest_json(
     employer_id: uuid.UUID,
     data: PayrollReportCreate,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("payroll:write")),
 ):
     submitted_by = (
-        uuid.UUID(current_user["id"]) if current_user["id"] != "admin" else None
+        uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
     )
     async with session.begin():
         return await payroll_service.ingest_json(employer_id, data, session, submitted_by=submitted_by)
@@ -48,10 +50,10 @@ async def upload_csv(
     employer_id: uuid.UUID,
     file: UploadFile,
     session: AsyncSession = Depends(get_session),
-    current_user: Principal = Depends(get_current_user),
+    principal: Principal = Depends(require_scope("payroll:write")),
 ):
     submitted_by = (
-        uuid.UUID(current_user["id"]) if current_user["id"] != "admin" else None
+        uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
     )
     content = await file.read()
     try:
@@ -67,7 +69,8 @@ async def upload_csv(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.get("/payroll-reports/{report_id}", response_model=PayrollReportRead)
+@router.get("/payroll-reports/{report_id}", response_model=PayrollReportRead,
+            dependencies=[Depends(require_scope("member:read", "payroll:write"))])
 async def get_payroll_report(
     report_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
