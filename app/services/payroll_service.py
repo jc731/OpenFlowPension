@@ -287,3 +287,16 @@ async def list_payroll_reports(employer_id: uuid.UUID, session: AsyncSession) ->
         .options(selectinload(PayrollReport.rows))
     )
     return list(result.scalars().all())
+
+
+async def list_all_payroll_reports(
+    session: AsyncSession,
+    employer_id: uuid.UUID | None = None,
+    limit: int = 100,
+) -> list[PayrollReport]:
+    """List reports across all employers (admin/LOB view). No rows loaded — use get_payroll_report for detail."""
+    stmt = select(PayrollReport).order_by(PayrollReport.created_at.desc()).limit(limit)
+    if employer_id:
+        stmt = stmt.where(PayrollReport.employer_id == employer_id)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())

@@ -136,6 +136,56 @@ export const retirementApi = {
     api.post(`/retirement-cases/${id}/cancel`, { cancel_reason: reason }),
 }
 
+// ── Payroll types ─────────────────────────────────────────────────────────────
+
+export interface PayrollReportRow {
+  id: string
+  member_number: string
+  member_id: string | null
+  employment_id: string | null
+  period_start: string
+  period_end: string
+  gross_earnings: string
+  employee_contribution: string
+  employer_contribution: string
+  days_worked: number
+  status: 'pending' | 'applied' | 'error' | 'skipped'
+  error_message: string | null
+  created_at: string
+}
+
+export interface PayrollReport {
+  id: string
+  employer_id: string
+  source_format: string
+  source_filename: string | null
+  status: string
+  row_count: number
+  processed_count: number
+  error_count: number
+  skipped_count: number
+  submitted_by: string | null
+  note: string | null
+  created_at: string
+  rows?: PayrollReportRow[]
+}
+
+export const payrollApi = {
+  list: (params?: { employer_id?: string; limit?: number }) =>
+    api.get<PayrollReport[]>('/payroll-reports', { params }),
+  get: (id: string) => api.get<PayrollReport>(`/payroll-reports/${id}`),
+  uploadCsv: (employerId: string, file: File, note?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (note) form.append('note', note)
+    return api.post<PayrollReport>(
+      `/employers/${employerId}/payroll-reports/upload`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    )
+  },
+}
+
 export const apiKeysApi = {
   list: (includeRevoked = false) =>
     api.get<ApiKey[]>('/api-keys', { params: { include_revoked: includeRevoked } }),

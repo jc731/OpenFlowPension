@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, and API key auth are built. Keycloak JWT (human-user auth), frontend, and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, and admin/LOB frontend scaffolding are built. Keycloak JWT (human-user auth), member portal frontend, and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -49,9 +49,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 | Testing | pytest + pytest-asyncio |
 | Encryption | `cryptography` (Fernet) — app-level SSN encryption |
 | Schemas | Pydantic v2 |
-| Auth | Keycloak (user auth, not yet integrated) + API keys (machine auth, not yet implemented) |
-| Portal frontend | Astro + React (not yet started) |
-| Document generation | WeasyPrint (not yet started) |
+| Auth | Keycloak (user auth, not yet integrated) + API keys (machine auth, built) |
+| Admin/LOB frontend | React + Vite + TypeScript + Tailwind v4 + shadcn/ui (`frontend/admin/`) |
+| Member portal frontend | Not yet started |
+| Document generation / forms | WeasyPrint (not yet started) |
 | Actuarial / numerical | Pure Python + `csv` stdlib (numpy/pandas deferred) |
 
 ---
@@ -475,6 +476,90 @@ API response schemas must never expose any `*_encrypted` field.
 Jane Smith — born 1965-03-15, hired 2000-01-15 at State University of Illinois, general staff, 100% time, Tier I Traditional. Retires 2025-01-15 after 25 years. Service credit entries span both accrual rule periods and link to correct `system_configurations` rows. Primary beneficiary: spouse Robert Smith.
 
 Running `make seed` should print a summary showing ~25.0 total service credit years.
+
+---
+
+## Admin / LOB frontend
+
+React SPA at `frontend/admin/`. Vite 6, TypeScript, Tailwind v4, shadcn/ui (components copied into `src/components/ui/`), React Router v7, TanStack Query, sonner for toasts, lucide-react icons.
+
+**Commands:**
+```bash
+cd frontend/admin
+pnpm dev      # dev server → localhost:5173 (proxies /api/* → localhost:8000)
+pnpm build    # production build → dist/
+pnpm typecheck
+```
+
+**Architecture:**
+- `src/lib/api.ts` — typed Axios client; all API types and API functions live here
+- `src/lib/utils.ts` — `cn()`, `formatDate()`, `formatCurrency()`
+- `src/components/layout/` — `AppShell` (Outlet + sidebar + toast), `Sidebar` (LOB nav + admin nav)
+- `src/components/ui/` — shadcn components (badge has custom `success`/`warning` variants)
+- `src/pages/` — one folder per domain area; all pages registered in `App.tsx`
+
+**Dev proxy:** Vite proxies `/api/*` to `http://localhost:8000`. The backend dev bypass still applies — no auth header needed in development.
+
+**Implemented pages:**
+- Dashboard — summary stats placeholder
+- Members — list + search; member detail with employment, salary, retirement cases, benefit estimate
+- Employers — list
+- Retirement Cases — list with approve/activate/cancel actions
+- Payroll Reports — list with CSV upload + employer filter; detail with row-level status table
+- System Config — placeholder (read-only display of config keys)
+- API Keys — list, create, revoke, rotate with plaintext key reveal on create/rotate
+
+**Forms/letters:** Deferred. Will be managed together in one module (fund-specific document generation). Do not build piecemeal.
+
+**Member portal:** Separate frontend, not yet started. Architecture (Astro, Vite, etc.) not decided — evaluate when the feature scope is clearer.
+
+---
+
+## System configuration keys
+
+All fund-level operational rules live in the `system_configurations` table. Each row: `key` (string), `config_value` (JSONB), `effective_date`. Looked up via `get_config(key, as_of, session)` in `app/services/config_service.py`.
+
+### Currently seeded keys
+
+| Key | Structure | Purpose |
+|---|---|---|
+| `service_credit_accrual_rule` | `{"rule": "monthly_floor" \| "proportional_percent_time"}` | How service credit years are computed per payroll row |
+| `employment_types` | `{"types": [...]}` | Whitelist of valid employment type strings |
+| `leave_types` | `{"types": [...]}` | Whitelist of valid leave type strings |
+| `fund_calculation_config` | See `app/schemas/fund_config.py` (`FundConfig`) | All benefit calculation parameters; optional — falls back to SURS defaults if absent |
+
+### Keys required at go-live (not yet seeded)
+
+| Key | Planned structure | Purpose |
+|---|---|---|
+| `payroll_validation_config` | `{"max_gross_earnings": number, "max_days_per_period": int, "employee_rate_tolerance": number, "employer_rate_tolerance": number}` | Per-upload guardrails; rows outside tolerances are flagged rather than hard-rejected |
+| `concurrent_employment_max_annual_credit` | `{"max_years": 1.0}` | Cap on total service credit per member per calendar year across concurrent positions |
+| `service_purchase_rates_{type}` | `{"factors": [...], "effective_date": "YYYY-MM-DD"}` | Cost factor tables for service purchase quotes (military, refund, etc.) |
+| `federal_tax_brackets_{year}` | Standard IRS bracket structure | Federal withholding; used by the planned tax calculation endpoint |
+| `illinois_tax_brackets_{year}` | State-specific bracket structure | State withholding |
+
+### Adding a new config key
+
+1. Seed a row in `system_configurations` with the appropriate `effective_date`
+2. Call `get_config(key, as_of, session)` in the relevant service — raises `ConfigNotFoundError` if missing
+3. Document the key in this table
+4. For fund-calculation parameters: add the field to `FundConfig` in `app/schemas/fund_config.py` and wire it through `calculator.py`
+
+---
+
+## Admin configuration management (planned)
+
+There are two distinct levels of configuration:
+
+**System administrator config** (fund IT / deployment team) — controls platform behavior, calculation rules, and validation thresholds. Examples: `fund_calculation_config`, `service_credit_accrual_rule`, `payroll_validation_config`. These are stored in `system_configurations` and currently can only be changed by direct DB seed scripts or a future admin API endpoint.
+
+**Fund staff config** (fund administrators, HR) — day-to-day operational settings. Examples: employer records, plan tier assignments, employment type whitelists. These are already manageable through existing CRUD endpoints.
+
+**Planned System Config UI** — the System Config page in the admin frontend (`/config`) will eventually expose read/edit access to `system_configurations` rows for authorized system administrators. The read-only placeholder is already wired. When building the edit flow:
+- Show current value as formatted JSON with effective date
+- New value is a new row (never UPDATE existing rows — same immutability pattern as salary history)
+- Require a future `effective_date` for rule changes to avoid retroactive recalculation surprises
+- Gate behind an `admin` scope (Keycloak group or API key scope) — fund staff should not be able to edit calculation parameters
 
 ---
 

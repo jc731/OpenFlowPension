@@ -11,6 +11,16 @@ from app.services import payroll_service
 router = APIRouter(tags=["payroll"])
 
 
+@router.get("/payroll-reports", response_model=list[PayrollReportRead])
+async def list_all_payroll_reports(
+    employer_id: uuid.UUID | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+):
+    """List payroll reports across all employers. Rows not included — fetch individual report for detail."""
+    return await payroll_service.list_all_payroll_reports(session, employer_id=employer_id, limit=limit)
+
+
 @router.get("/employers/{employer_id}/payroll-reports", response_model=list[PayrollReportRead])
 async def list_payroll_reports(
     employer_id: uuid.UUID,
