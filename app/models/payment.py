@@ -152,8 +152,25 @@ class TaxWithholdingElection(Base):
     # single | married_filing_jointly | married_filing_separately |
     # head_of_household | qualifying_surviving_spouse
     filing_status: Mapped[str] = mapped_column(String, nullable=False)
+
+    # formula | flat_amount | exempt
+    # formula  → full W-4P annualized percentage method (default)
+    # flat_amount → withhold exactly additional_withholding each period, no formula
+    # exempt   → zero withholding; member has claimed exemption
+    withholding_type: Mapped[str] = mapped_column(String, nullable=False, default="formula", server_default="formula")
+
+    # W-4P Step 4(c) — extra per-period withholding on top of formula result.
+    # For withholding_type=flat_amount this IS the total flat amount (not additional).
     additional_withholding: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0, server_default="0")
+
+    # Legacy exempt flag — honoured alongside withholding_type for backward compat
     exempt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # W-4P fields (2020+ form) — all default to 0/False; ignored for flat_amount / exempt types
+    step_2_multiple_jobs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    step_3_dependent_credit: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    step_4a_other_income: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
+    step_4b_deductions: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0, server_default="0")
 
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     superseded_date: Mapped[date | None] = mapped_column(Date, nullable=True)

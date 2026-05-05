@@ -1,18 +1,33 @@
 """Net pay calculation engine.
 
 Three entry points:
-- calculate_net_pay()       — pure function; no DB access; drives the stateless endpoint
-- get_net_pay_preview()     — DB-backed read-only; resolves a BenefitPayment's member data
-- apply_net_pay()           — write path; persists PaymentDeduction rows + updates net_amount
+- calculate_net_pay()           — pure function; no DB access; drives the stateless endpoint
+- get_net_pay_preview()         — DB-backed read-only; resolves a BenefitPayment's member data
+- apply_net_pay()               — write path; persists PaymentDeduction rows + updates net_amount
 
-Math order:
+Check-stub math order:
     gross
-    − pre-tax deductions          → reduces taxable base
+    − pre-tax deductions                → reduces taxable base; no external payee
     = taxable gross
-    − federal income tax          → IRS annualized percentage method (Pub 15-T)
-    − state income tax            → jurisdiction-specific flat / bracket rate
-    − post-tax deductions
+    − federal income tax                → IRS Pub 15-T annualized percentage method (W-4P)
+    − state income tax                  → jurisdiction-specific rate
+    − post-tax deductions               → internal deductions; no external payee
+    − third-party disbursements         → routed to external entities (courts, unions, etc.)
     = net pay
+
+Federal formula (IRS Pub 15-T 2025 Worksheet 1):
+    1. annualized_pay  = gross × pay_periods + step_4a_other_income
+    2. adjusted_income = annualized_pay − std_deduction[filing_status] − step_4b_deductions
+       (std_deduction from higher_withholding table when step_2_multiple_jobs=True)
+    3. tentative_tax   = bracket_table(adjusted_income)
+    4. annual_tax      = tentative_tax − step_3_dependent_credit
+    5. per_period      = annual_tax / pay_periods
+    6. final           = per_period + step_4c (additional_withholding)   → clamped ≥ 0
+
+DB routing rule for DeductionOrders:
+    - third_party_entity_id IS NOT NULL → third_party_disbursements tier
+    - is_pretax = True                  → pretax_deductions
+    - all others                        → posttax_deductions
 """
 
 from __future__ import annotations
@@ -40,6 +55,7 @@ from app.schemas.net_pay import (
     NetPayResult,
     NetPayTaxElectionInput,
     PayFrequency,
+    ThirdPartyDisbursementInput,
 )
 from app.services.config_service import ConfigNotFoundError, get_config
 
@@ -52,7 +68,7 @@ PAY_PERIODS: dict[str, int] = {
     "weekly": 52,
 }
 
-# Maps filing statuses that share a bracket table
+# Single bracket table used for these filing statuses
 _FILING_STATUS_ALIAS: dict[str, str] = {
     "married_filing_separately": "single",
     "head_of_household": "single",
@@ -60,17 +76,16 @@ _FILING_STATUS_ALIAS: dict[str, str] = {
 }
 
 
-# ── Tax calculation helpers ────────────────────────────────────────────────────
+# ── Tax calculation ────────────────────────────────────────────────────────────
 
 def _apply_brackets(taxable: Decimal, brackets: list[dict[str, Any]]) -> Decimal:
-    """Apply a graduated bracket table to an annualized taxable amount."""
+    """Graduated bracket table applied to an annualized taxable amount."""
     tax = Decimal("0")
     for band in brackets:
         floor = Decimal(str(band["min"]))
         ceiling = Decimal(str(band["max"])) if band["max"] is not None else None
         rate = Decimal(str(band["rate"]))
         base = Decimal(str(band["base_tax"]))
-
         if taxable <= floor:
             break
         if ceiling is None or taxable <= ceiling:
@@ -79,26 +94,48 @@ def _apply_brackets(taxable: Decimal, brackets: list[dict[str, Any]]) -> Decimal
     return tax.quantize(_TWO, rounding=ROUND_HALF_UP)
 
 
+def _is_exempt(election: NetPayTaxElectionInput) -> bool:
+    return election.withholding_type == "exempt" or election.exempt
+
+
 def _compute_federal_withholding(
     gross: Decimal,
     election: NetPayTaxElectionInput,
     pay_periods: int,
     config: dict[str, Any],
 ) -> Decimal:
-    if election.exempt:
+    """IRS Pub 15-T 2025 Worksheet 1 — Percentage Method for pension/annuity payments."""
+    if _is_exempt(election):
         return Decimal("0")
 
+    if election.withholding_type == "flat_amount":
+        return max(Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP), Decimal("0"))
+
+    # Select standard deduction table based on Step 2 checkbox
+    std_table_key = "higher_withholding_deduction" if election.step_2_multiple_jobs else "standard_withholding_deduction"
+    std_deductions: dict[str, float] = config[std_table_key]
     brackets_by_status: dict[str, list[dict]] = config["brackets"]
-    std_deductions: dict[str, float] = config["standard_withholding_deduction"]
 
     status_key = _FILING_STATUS_ALIAS.get(election.filing_status, election.filing_status)
     brackets = brackets_by_status.get(status_key) or brackets_by_status.get("single", [])
     std_deduction = Decimal(str(std_deductions.get(status_key, std_deductions.get("single", 0))))
 
-    annualized = gross * pay_periods
-    adjusted = max(annualized - std_deduction, Decimal("0"))
-    annual_tax = _apply_brackets(adjusted, brackets)
+    # Step 1: annualize and add Step 4(a) other income
+    annualized = gross * pay_periods + Decimal(str(election.step_4a_other_income))
 
+    # Step 2: subtract standard deduction and Step 4(b) deductions
+    adjusted = max(
+        annualized - std_deduction - Decimal(str(election.step_4b_deductions)),
+        Decimal("0"),
+    )
+
+    # Step 3: apply brackets
+    tentative_annual = _apply_brackets(adjusted, brackets)
+
+    # Step 4: subtract Step 3 dependent credit (dollar-for-dollar tax reduction)
+    annual_tax = max(tentative_annual - Decimal(str(election.step_3_dependent_credit)), Decimal("0"))
+
+    # Step 5: de-annualize and add Step 4(c) extra withholding
     per_period = (annual_tax / pay_periods).quantize(_TWO, rounding=ROUND_HALF_UP)
     extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
     return max(per_period + extra, Decimal("0"))
@@ -109,8 +146,12 @@ def _compute_illinois_withholding(
     election: NetPayTaxElectionInput,
     config: dict[str, Any],
 ) -> Decimal:
-    if election.exempt:
+    if _is_exempt(election):
         return Decimal("0")
+
+    if election.withholding_type == "flat_amount":
+        return max(Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP), Decimal("0"))
+
     rate = Decimal(str(config["rate"]))
     tax = (taxable_gross * rate).quantize(_TWO, rounding=ROUND_HALF_UP)
     extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
@@ -127,11 +168,13 @@ def calculate_net_pay(
     pay_frequency: PayFrequency,
     federal_tax_config: dict[str, Any] | None,
     illinois_tax_config: dict[str, Any] | None,
+    third_party_disbursements: list[ThirdPartyDisbursementInput] | None = None,
     third_party_names: dict[uuid.UUID, str] | None = None,
 ) -> NetPayResult:
     """Pure function — no DB access. Called by both the stateless and DB-backed paths."""
     pay_periods = PAY_PERIODS[pay_frequency]
     names = third_party_names or {}
+    disbursements = third_party_disbursements or []
 
     pretax_lines: list[NetPayLineItem] = []
     posttax_lines: list[NetPayLineItem] = []
@@ -180,9 +223,26 @@ def calculate_net_pay(
             ))
         # Additional jurisdictions: extend here
 
+    tpd_lines: list[NetPayLineItem] = []
+    for d in disbursements:
+        amt = (
+            d.amount
+            if d.amount_type == "fixed"
+            else (gross * d.amount).quantize(_TWO, rounding=ROUND_HALF_UP)
+        )
+        tpd_lines.append(NetPayLineItem(
+            description=d.description,
+            amount=amt,
+            deduction_type=d.deduction_type,
+            is_pretax=False,
+            third_party_entity_id=d.third_party_entity_id,
+            third_party_entity_name=names.get(d.third_party_entity_id),
+        ))
+
     total_taxes = sum(l.amount for l in tax_lines) or Decimal("0")
     total_posttax = sum(l.amount for l in posttax_lines) or Decimal("0")
-    total_deductions = (total_pretax + total_taxes + total_posttax).quantize(_TWO, rounding=ROUND_HALF_UP)
+    total_tpd = sum(l.amount for l in tpd_lines) or Decimal("0")
+    total_deductions = (total_pretax + total_taxes + total_posttax + total_tpd).quantize(_TWO, rounding=ROUND_HALF_UP)
     net = (gross - total_deductions).quantize(_TWO, rounding=ROUND_HALF_UP)
 
     return NetPayResult(
@@ -191,10 +251,12 @@ def calculate_net_pay(
         taxable_gross=taxable_gross,
         tax_withholdings=tax_lines,
         posttax_deductions=posttax_lines,
+        third_party_disbursements=tpd_lines,
         net_amount=net,
         total_pretax_deductions=total_pretax,
         total_taxes=total_taxes,
         total_posttax_deductions=total_posttax,
+        total_third_party_disbursements=total_tpd,
         total_deductions=total_deductions,
         payment_date=payment_date,
         tax_year=payment_date.year,
@@ -202,13 +264,12 @@ def calculate_net_pay(
     )
 
 
-# ── Config loading helpers ─────────────────────────────────────────────────────
+# ── Config loading ─────────────────────────────────────────────────────────────
 
 async def _load_tax_configs(
     payment_date: date,
     session: AsyncSession,
 ) -> tuple[dict | None, dict | None]:
-    """Return (federal_config, illinois_config) — None if the key isn't seeded."""
     federal = None
     illinois = None
     try:
@@ -238,13 +299,13 @@ async def _resolve_third_party_names(
     return {row.id: row.name for row in result}
 
 
-# ── DB-backed paths ────────────────────────────────────────────────────────────
+# ── DB-backed helpers ──────────────────────────────────────────────────────────
 
-async def _build_deduction_inputs_for_payment(
+async def _load_active_orders(
     payment: BenefitPayment,
     session: AsyncSession,
-) -> list[NetPayDeductionInput]:
-    """Resolve active DeductionOrders for a payment's member as of payment_date."""
+) -> tuple[list[NetPayDeductionInput], list[ThirdPartyDisbursementInput]]:
+    """Split active DeductionOrders into regular deductions vs. third-party disbursements."""
     stmt = (
         select(DeductionOrder)
         .where(
@@ -260,18 +321,27 @@ async def _build_deduction_inputs_for_payment(
     )
     orders = (await session.execute(stmt)).scalars().all()
 
-    inputs: list[NetPayDeductionInput] = []
+    deductions: list[NetPayDeductionInput] = []
+    disbursements: list[ThirdPartyDisbursementInput] = []
+
     for order in orders:
-        ent = order.third_party_entity
-        inputs.append(NetPayDeductionInput(
-            description=_order_description(order),
-            deduction_type=order.deduction_type,
-            amount_type=order.amount_type,
-            amount=Decimal(str(order.amount)),
-            is_pretax=order.is_pretax,
-            third_party_entity_id=order.third_party_entity_id,
-        ))
-    return inputs
+        if order.third_party_entity_id is not None:
+            disbursements.append(ThirdPartyDisbursementInput(
+                third_party_entity_id=order.third_party_entity_id,
+                description=_order_description(order),
+                deduction_type=order.deduction_type,
+                amount_type=order.amount_type,
+                amount=Decimal(str(order.amount)),
+            ))
+        else:
+            deductions.append(NetPayDeductionInput(
+                description=_order_description(order),
+                deduction_type=order.deduction_type,
+                amount_type=order.amount_type,
+                amount=Decimal(str(order.amount)),
+                is_pretax=order.is_pretax,
+            ))
+    return deductions, disbursements
 
 
 def _order_description(order: DeductionOrder) -> str:
@@ -285,7 +355,6 @@ async def _build_tax_election_inputs(
     payment: BenefitPayment,
     session: AsyncSession,
 ) -> list[NetPayTaxElectionInput]:
-    """Fetch active W-4 elections for the member as of payment_date."""
     result = await session.execute(
         select(TaxWithholdingElection).where(
             TaxWithholdingElection.member_id == payment.member_id,
@@ -293,33 +362,39 @@ async def _build_tax_election_inputs(
             TaxWithholdingElection.superseded_date.is_(None),
         )
     )
-    elections = result.scalars().all()
     return [
         NetPayTaxElectionInput(
             jurisdiction=e.jurisdiction,
             filing_status=e.filing_status,
+            withholding_type=e.withholding_type,
             additional_withholding=Decimal(str(e.additional_withholding)),
+            step_2_multiple_jobs=e.step_2_multiple_jobs,
+            step_3_dependent_credit=Decimal(str(e.step_3_dependent_credit)),
+            step_4a_other_income=Decimal(str(e.step_4a_other_income)),
+            step_4b_deductions=Decimal(str(e.step_4b_deductions)),
             exempt=e.exempt,
         )
-        for e in elections
+        for e in result.scalars().all()
     ]
 
+
+# ── DB-backed public functions ─────────────────────────────────────────────────
 
 async def get_net_pay_preview(
     payment_id: uuid.UUID,
     session: AsyncSession,
 ) -> NetPayResult:
-    """Read-only. Resolves member's standing orders + W-4 elections and computes net pay."""
+    """Read-only. Resolves member's standing orders + W-4P elections and computes net pay."""
     payment = await session.get(BenefitPayment, payment_id)
     if not payment:
         raise ValueError("Payment not found")
 
-    deductions = await _build_deduction_inputs_for_payment(payment, session)
+    deductions, disbursements = await _load_active_orders(payment, session)
     elections = await _build_tax_election_inputs(payment, session)
     federal_cfg, illinois_cfg = await _load_tax_configs(payment.payment_date, session)
 
-    entity_ids = [d.third_party_entity_id for d in deductions if d.third_party_entity_id]
-    names = await _resolve_third_party_names(entity_ids, session)
+    all_entity_ids = [d.third_party_entity_id for d in disbursements]
+    names = await _resolve_third_party_names(all_entity_ids, session)
 
     return calculate_net_pay(
         gross=Decimal(str(payment.gross_amount)),
@@ -329,6 +404,7 @@ async def get_net_pay_preview(
         pay_frequency="monthly",
         federal_tax_config=federal_cfg,
         illinois_tax_config=illinois_cfg,
+        third_party_disbursements=disbursements,
         third_party_names=names,
     )
 
@@ -338,7 +414,7 @@ async def apply_net_pay(
     session: AsyncSession,
     applied_by: uuid.UUID | None = None,
 ) -> NetPayResult:
-    """Write path. Resolves net pay then persists PaymentDeduction rows + net_amount.
+    """Write path. Persists PaymentDeduction rows + updates net_amount.
 
     Idempotency guard: raises if deductions already exist on this payment.
     """
@@ -348,18 +424,18 @@ async def apply_net_pay(
     if payment.status == "issued":
         raise ValueError("Cannot apply net pay to an already-issued payment")
 
-    existing_count = (await session.execute(
+    existing = (await session.execute(
         select(PaymentDeduction.id).where(PaymentDeduction.payment_id == payment_id).limit(1)
     )).first()
-    if existing_count:
+    if existing:
         raise ValueError("Net pay has already been applied to this payment — reverse and reissue to correct")
 
-    deductions = await _build_deduction_inputs_for_payment(payment, session)
+    deductions, disbursements = await _load_active_orders(payment, session)
     elections = await _build_tax_election_inputs(payment, session)
     federal_cfg, illinois_cfg = await _load_tax_configs(payment.payment_date, session)
 
-    entity_ids = [d.third_party_entity_id for d in deductions if d.third_party_entity_id]
-    names = await _resolve_third_party_names(entity_ids, session)
+    all_entity_ids = [d.third_party_entity_id for d in disbursements]
+    names = await _resolve_third_party_names(all_entity_ids, session)
 
     net_pay = calculate_net_pay(
         gross=Decimal(str(payment.gross_amount)),
@@ -369,20 +445,26 @@ async def apply_net_pay(
         pay_frequency="monthly",
         federal_tax_config=federal_cfg,
         illinois_tax_config=illinois_cfg,
+        third_party_disbursements=disbursements,
         third_party_names=names,
     )
 
-    # Resolve deduction_order_id per standing-order-backed deductions
-    orders_by_type: dict[str, DeductionOrder] = {}
+    # Build order lookup for linking PaymentDeduction rows back to their source
     stmt = select(DeductionOrder).where(
         DeductionOrder.member_id == payment.member_id,
         DeductionOrder.effective_date <= payment.payment_date,
         or_(DeductionOrder.end_date.is_(None), DeductionOrder.end_date > payment.payment_date),
     )
+    orders_by_type: dict[str, DeductionOrder] = {}
     for order in (await session.execute(stmt)).scalars().all():
         orders_by_type[order.deduction_type] = order
 
-    all_lines = net_pay.pretax_deductions + net_pay.tax_withholdings + net_pay.posttax_deductions
+    all_lines = (
+        net_pay.pretax_deductions
+        + net_pay.tax_withholdings
+        + net_pay.posttax_deductions
+        + net_pay.third_party_disbursements
+    )
     for line in all_lines:
         order = orders_by_type.get(line.deduction_type)
         session.add(PaymentDeduction(
@@ -408,8 +490,8 @@ async def calculate_net_pay_stateless(
     """Load tax configs from DB then delegate to the pure calculate_net_pay()."""
     federal_cfg, illinois_cfg = await _load_tax_configs(req.payment_date, session)
 
-    entity_ids = [d.third_party_entity_id for d in req.deductions if d.third_party_entity_id]
-    names = await _resolve_third_party_names(entity_ids, session)
+    all_entity_ids = [d.third_party_entity_id for d in req.third_party_disbursements]
+    names = await _resolve_third_party_names(all_entity_ids, session)
 
     return calculate_net_pay(
         gross=Decimal(str(req.gross_amount)),
@@ -419,5 +501,6 @@ async def calculate_net_pay_stateless(
         pay_frequency=req.pay_frequency,
         federal_tax_config=federal_cfg,
         illinois_tax_config=illinois_cfg,
+        third_party_disbursements=req.third_party_disbursements,
         third_party_names=names,
     )

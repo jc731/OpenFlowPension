@@ -56,7 +56,18 @@ class TaxWithholdingElectionCreate(BaseModel):
         "head_of_household",
         "qualifying_surviving_spouse",
     ]
+    # formula  → full W-4P annualized percentage method (default)
+    # flat_amount → withhold exactly additional_withholding each period
+    # exempt   → zero withholding
+    withholding_type: Literal["formula", "flat_amount", "exempt"] = "formula"
+    # W-4P Step 4(c): extra per-period amount (formula) or total flat amount (flat_amount)
     additional_withholding: Decimal = Decimal("0")
+    # W-4P-specific fields (ignored for flat_amount / exempt types)
+    step_2_multiple_jobs: bool = False
+    step_3_dependent_credit: Decimal = Decimal("0")
+    step_4a_other_income: Decimal = Decimal("0")
+    step_4b_deductions: Decimal = Decimal("0")
+    # Legacy flag — prefer withholding_type="exempt" for new elections
     exempt: bool = False
     effective_date: date
 
@@ -68,7 +79,12 @@ class TaxWithholdingElectionRead(BaseModel):
     member_id: uuid.UUID
     jurisdiction: str
     filing_status: str
+    withholding_type: str
     additional_withholding: Decimal
+    step_2_multiple_jobs: bool
+    step_3_dependent_credit: Decimal
+    step_4a_other_income: Decimal
+    step_4b_deductions: Decimal
     exempt: bool
     effective_date: date
     superseded_date: date | None

@@ -79,12 +79,22 @@ async def seed():
                     config_key="federal_income_tax_withholding",
                     config_value={
                         "tax_year": 2025,
+                        # IRS Pub 15-T Table 1 — Step 2 NOT checked (single pension source)
                         "standard_withholding_deduction": {
                             "single": 15000,
                             "married_filing_separately": 15000,
                             "head_of_household": 22500,
                             "married_filing_jointly": 30000,
                             "qualifying_surviving_spouse": 30000,
+                        },
+                        # IRS Pub 15-T Table 1 — Step 2 checked (multiple jobs/pensions)
+                        # Halved to prevent under-withholding across income sources
+                        "higher_withholding_deduction": {
+                            "single": 7500,
+                            "married_filing_separately": 7500,
+                            "head_of_household": 11250,
+                            "married_filing_jointly": 15000,
+                            "qualifying_surviving_spouse": 15000,
                         },
                         "brackets": {
                             "single": [
