@@ -18,6 +18,7 @@ make migrate   # run alembic migrations against the running DB
 make seed      # run scripts/seed_mvp.py (Jane Smith 25-year scenario)
 make test      # pytest
 make shell     # open shell inside api container
+make preview   # build frontend + start full stack with nginx on port 80 (Cloudflare Tunnel target)
 ```
 
 Run a single test file:

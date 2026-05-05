@@ -1,4 +1,4 @@
-.PHONY: up down migrate seed test shell
+.PHONY: up down migrate seed test shell preview
 
 up:
 	docker compose up --build
@@ -17,3 +17,8 @@ test:
 
 shell:
 	docker compose exec api bash
+
+preview:
+	cd frontend/admin && pnpm install && pnpm build
+	docker compose --profile deploy up --build -d
+	docker compose exec api alembic upgrade head

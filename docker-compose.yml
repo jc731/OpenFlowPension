@@ -45,6 +45,21 @@ services:
       redis:
         condition: service_healthy
 
+  # nginx — only started with: docker compose --profile deploy up  (or make preview)
+  # Serves the built React SPA and proxies /api/* to the FastAPI container.
+  # Point your Cloudflare Tunnel public hostname at http://localhost:80.
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: [deploy]
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/admin/dist:/usr/share/nginx/html:ro
+    depends_on:
+      api:
+        condition: service_started
+
   # Keycloak — only started with: docker compose --profile auth up
   # Imports the dev realm from keycloak/realm-export.json on first start.
   keycloak:

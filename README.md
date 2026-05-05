@@ -52,7 +52,7 @@ We plan to have the best people. That's the whole pitch.
 | Member portal frontend | Not yet started |
 | Background jobs | Celery + Redis |
 | Document generation | WeasyPrint (deferred) |
-| Auth | Keycloak (JWT, deferred) + API keys (built) |
+| Auth | Keycloak JWT (built) + API keys (built) |
 | Actuarial / numerical | Pure Python (NumPy / pandas deferred) |
 
 ---
@@ -79,6 +79,37 @@ To start the admin frontend:
 cd frontend/admin
 pnpm install
 pnpm dev       # → http://localhost:5173
+```
+
+---
+
+## Preview deployment (homelab / Cloudflare Tunnel)
+
+`make preview` builds the React SPA, starts the full stack (postgres + redis + api + nginx) on port 80, and runs migrations. Point any reverse proxy or Cloudflare Tunnel public hostname at `http://localhost:80`.
+
+```bash
+# Build frontend and start full stack on port 80
+make preview
+
+# Stop
+docker compose --profile deploy down
+```
+
+**Cloudflare Tunnel setup:**
+
+1. In Zero Trust → Networks → Tunnels, create or select your tunnel.
+2. Add a public hostname (e.g. `openflow-dev.yourdomain.com`) with:
+   - Service type: `HTTP`
+   - URL: `localhost:80` (or `<homelab-ip>:80` if cloudflared runs elsewhere)
+3. Run `make preview` — nginx serves the SPA and proxies `/api/*` to FastAPI internally.
+
+The Swagger docs are proxied at `https://openflow-dev.yourdomain.com/docs`.
+
+**Auth in preview:** With `KEYCLOAK_URL` unset (default), the backend dev-admin bypass stays active. To test with real Keycloak auth, also start the auth profile and set `VITE_KEYCLOAK_URL` in `frontend/admin/.env.local` before building:
+
+```bash
+docker compose --profile auth --profile deploy up --build -d
+# Set VITE_KEYCLOAK_URL=http://<homelab-ip>:8080 in frontend/admin/.env.local first
 ```
 
 ---
