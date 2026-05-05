@@ -74,6 +74,55 @@ async def seed():
                     superseded_date=None,
                     note="Post-2024 rule: any time in month = full month credit",
                 ),
+                # ── Federal income tax withholding — IRS Pub 15-T 2025 percentage method ──
+                dict(
+                    config_key="federal_income_tax_withholding",
+                    config_value={
+                        "tax_year": 2025,
+                        "standard_withholding_deduction": {
+                            "single": 15000,
+                            "married_filing_separately": 15000,
+                            "head_of_household": 22500,
+                            "married_filing_jointly": 30000,
+                            "qualifying_surviving_spouse": 30000,
+                        },
+                        "brackets": {
+                            "single": [
+                                {"min": 0, "max": 11925, "rate": 0.10, "base_tax": 0},
+                                {"min": 11925, "max": 48475, "rate": 0.12, "base_tax": 1192.50},
+                                {"min": 48475, "max": 103350, "rate": 0.22, "base_tax": 5578.50},
+                                {"min": 103350, "max": 197300, "rate": 0.24, "base_tax": 17651.50},
+                                {"min": 197300, "max": 250525, "rate": 0.32, "base_tax": 40199.50},
+                                {"min": 250525, "max": 626350, "rate": 0.35, "base_tax": 57231.50},
+                                {"min": 626350, "max": None, "rate": 0.37, "base_tax": 188769.75},
+                            ],
+                            "married_filing_jointly": [
+                                {"min": 0, "max": 23850, "rate": 0.10, "base_tax": 0},
+                                {"min": 23850, "max": 96950, "rate": 0.12, "base_tax": 2385.00},
+                                {"min": 96950, "max": 206700, "rate": 0.22, "base_tax": 11157.00},
+                                {"min": 206700, "max": 394600, "rate": 0.24, "base_tax": 35302.00},
+                                {"min": 394600, "max": 501050, "rate": 0.32, "base_tax": 80397.00},
+                                {"min": 501050, "max": 751600, "rate": 0.35, "base_tax": 114462.00},
+                                {"min": 751600, "max": None, "rate": 0.37, "base_tax": 202154.50},
+                            ],
+                        },
+                    },
+                    effective_date=date(2025, 1, 1),
+                    superseded_date=None,
+                    note="IRS Pub 15-T 2025 — annualized percentage method for pension payments",
+                ),
+                # ── Illinois income tax — flat rate ───────────────────────────
+                dict(
+                    config_key="illinois_income_tax",
+                    config_value={
+                        "tax_year": 2025,
+                        "rate": 0.0495,
+                        "description": "Illinois flat income tax rate effective 2017-07-01",
+                    },
+                    effective_date=date(2025, 1, 1),
+                    superseded_date=None,
+                    note="IL flat rate 4.95%",
+                ),
             ]
 
             config_rows = {}

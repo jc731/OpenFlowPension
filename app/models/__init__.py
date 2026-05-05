@@ -1,3 +1,4 @@
+from app.models.third_party_entity import ThirdPartyEntity
 from app.models.plan_config import PlanTier, PlanType, PlanConfiguration, SystemConfiguration
 from app.models.employer import Employer
 from app.models.member import Member
@@ -37,4 +38,5 @@ __all__ = [
     "MemberBenefitElection",
     "RetirementCase",
     "ApiKey",
+    "ThirdPartyEntity",
 ]

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, Keycloak JWT auth, and admin/LOB frontend scaffolding are built. Member portal frontend and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, Keycloak JWT auth, admin/LOB frontend scaffolding, net pay calculation engine, and third-party entity management are built. Member portal frontend and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -372,9 +372,52 @@ For large files (>1,000 rows), payroll ingestion should be offloaded to a Celery
 
 `contribution_records` accumulates the raw employee + employer contributions. Interest crediting (C&I accumulation for Money Purchase calculation) is a separate periodic process that will read `contribution_records`, apply rate tables stored in `system_configurations`, and write interest entries back. The exact crediting frequency and compounding rules differ by fund. Defer until Money Purchase is in active use.
 
-### Tax withholding calculation engine (backlog — not yet implemented)
+### Net pay calculation engine
 
-`POST /api/v1/calculate/tax-withholding` — stateless endpoint. Takes gross amount + W-4 election + tax year → returns computed federal and state withholding amounts. Tax brackets stored in `system_configurations` with keys like `federal_tax_brackets_2025` (JSONB), versioned by effective date — same config service pattern used everywhere else. Historic bracket lookup for prior-year payment review is supported by the config pattern but low priority. Implement before automating payroll runs.
+Computes gross → net for a pension payment and returns a full check-stub breakdown. Three entry points:
+
+- **`POST /api/v1/calculate/net-pay`** — stateless; caller provides gross, deduction list, and tax elections. Used for estimates, what-if scenarios, and UI confirmation screens. Gated by `benefit:calculate` scope.
+- **`GET /api/v1/payments/{id}/net-pay`** — read-only DB-backed preview. Resolves the payment's active `DeductionOrder` rows and `TaxWithholdingElection` rows and returns the projected breakdown. Safe to call repeatedly.
+- **`POST /api/v1/payments/{id}/apply-net-pay`** — write path. Persists `PaymentDeduction` rows and updates `net_amount`. Idempotency guard: raises 409 if deductions are already applied. Gated by `member:write`.
+
+**Math order:**
+```
+gross
+− pre-tax deductions        (reduce taxable base)
+= taxable gross
+− federal income tax        (IRS Pub 15-T annualized percentage method)
+− state income tax          (Illinois flat 4.95%; extensible to other jurisdictions)
+− post-tax deductions
+= net pay
+```
+
+SS and Medicare are not applicable to pension annuity payments and are intentionally omitted.
+
+**Tax config:** Brackets loaded from `system_configurations` via `get_config()`:
+- Key `federal_income_tax_withholding` — IRS Pub 15-T percentage method tables (standard withholding deduction by filing status + graduated brackets). Seeded for 2025.
+- Key `illinois_income_tax` — flat rate + description. Seeded for 2025.
+
+Both are effective-dated — seed a new row each year when IRS publishes updated brackets. The config service's `as_of` lookup handles year selection automatically.
+
+**Response schema:** `NetPayResult` contains `pretax_deductions`, `taxable_gross`, `tax_withholdings`, `posttax_deductions`, `net_amount`, and running totals — everything needed to render a check stub.
+
+Service: `app/services/net_pay_service.py`. Schemas: `app/schemas/net_pay.py`.
+
+### Third-party entity management
+
+Payee organizations for disbursement routing — unions, courts, insurance carriers, disbursement units, etc.
+
+`third_party_entities` table: name, `entity_type` (disbursement_unit | union | insurance_carrier | court | other), contact fields (address, phone, email), EIN, encrypted bank account for ACH routing, `payment_method`, `active` flag.
+
+`DeductionOrder.third_party_entity_id` — nullable FK; links a standing deduction to its payee. When set, `NetPayLineItem` carries `third_party_entity_name` for display on check stubs.
+
+CRUD endpoints under `/api/v1/third-party-entities` (admin scope). Deactivation via `POST /{id}/deactivate` — never delete. Bank account number encrypted at rest (same Fernet pattern as member/beneficiary accounts); `bank_account_last_four` for display.
+
+Service: `app/services/third_party_entity_service.py`.
+
+### Tax withholding calculation engine (backlog — superseded by net pay engine)
+
+The net pay engine (`net_pay_service.py`) now handles tax withholding as part of the full check-stub calculation. A separate dedicated `/calculate/tax-withholding` endpoint is no longer planned.
 
 ### Routing number validation (backlog — not yet implemented)
 
@@ -536,6 +579,8 @@ All fund-level operational rules live in the `system_configurations` table. Each
 | `employment_types` | `{"types": [...]}` | Whitelist of valid employment type strings |
 | `leave_types` | `{"types": [...]}` | Whitelist of valid leave type strings |
 | `fund_calculation_config` | See `app/schemas/fund_config.py` (`FundConfig`) | All benefit calculation parameters; optional — falls back to SURS defaults if absent |
+| `federal_income_tax_withholding` | `{"tax_year": int, "standard_withholding_deduction": {filing_status: amount}, "brackets": {filing_status: [{min, max, rate, base_tax}]}}` | IRS Pub 15-T annualized percentage method — used by net pay engine |
+| `illinois_income_tax` | `{"tax_year": int, "rate": float}` | Illinois flat income tax rate — used by net pay engine |
 
 ### Keys required at go-live (not yet seeded)
 
@@ -544,8 +589,6 @@ All fund-level operational rules live in the `system_configurations` table. Each
 | `payroll_validation_config` | `{"max_gross_earnings": number, "max_days_per_period": int, "employee_rate_tolerance": number, "employer_rate_tolerance": number}` | Per-upload guardrails; rows outside tolerances are flagged rather than hard-rejected |
 | `concurrent_employment_max_annual_credit` | `{"max_years": 1.0}` | Cap on total service credit per member per calendar year across concurrent positions |
 | `service_purchase_rates_{type}` | `{"factors": [...], "effective_date": "YYYY-MM-DD"}` | Cost factor tables for service purchase quotes (military, refund, etc.) |
-| `federal_tax_brackets_{year}` | Standard IRS bracket structure | Federal withholding; used by the planned tax calculation endpoint |
-| `illinois_tax_brackets_{year}` | State-specific bracket structure | State withholding |
 
 ### Adding a new config key
 

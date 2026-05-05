@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.bank_account import MemberBankAccount
     from app.models.beneficiary import Beneficiary, BeneficiaryBankAccount
     from app.models.member import Member
+    from app.models.third_party_entity import ThirdPartyEntity
 
 
 class BenefitPayment(Base):
@@ -107,6 +108,9 @@ class DeductionOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
 
     member_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("members.id"), nullable=False)
+    third_party_entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("third_party_entities.id"), nullable=True
+    )
 
     deduction_type: Mapped[str] = mapped_column(String, nullable=False)
     deduction_code: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -127,6 +131,7 @@ class DeductionOrder(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     member: Mapped[Member] = relationship(back_populates="deduction_orders")
+    third_party_entity: Mapped[ThirdPartyEntity | None] = relationship()
     payment_deductions: Mapped[list[PaymentDeduction]] = relationship(back_populates="order")
 
 
