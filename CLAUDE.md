@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OpenFlow Pension is an open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Free to deploy and modify; cannot be sold as software itself; selling services and addons is explicitly permitted.
 
-**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, Keycloak JWT auth, admin/LOB frontend scaffolding, net pay calculation engine, and third-party entity management are built. Member portal frontend and document generation are not yet started. Not production-ready.
+**Status:** Early development. Core data model, benefit calculation engine, payment disbursement, payroll ingestion, contract/status management, beneficiary management, plan choice, DB-backed benefit estimate, death/survivor benefit module, retirement case module, API key auth, Keycloak JWT auth, admin/LOB frontend scaffolding, net pay calculation engine, third-party entity management, and standalone W-4P tax-withholding endpoint are built. Member portal frontend and document generation are not yet started. Not production-ready.
 
 ---
 
@@ -374,32 +374,40 @@ For large files (>1,000 rows), payroll ingestion should be offloaded to a Celery
 
 ### Net pay calculation engine
 
-Computes gross → net for a pension payment and returns a full check-stub breakdown. Three entry points:
+Computes gross → net for a pension payment and returns a full check-stub breakdown. Four entry points:
 
-- **`POST /api/v1/calculate/net-pay`** — stateless; caller provides gross, deduction list, and tax elections. Used for estimates, what-if scenarios, and UI confirmation screens. Gated by `benefit:calculate` scope.
+- **`POST /api/v1/calculate/tax-withholding`** — stateless; caller provides gross, pay frequency, and W-4P elections. Returns per-jurisdiction withholding with all IRS Worksheet 1B intermediate steps visible. Useful for member-facing calculators and external system integration. Gated by `benefit:calculate` scope.
+- **`POST /api/v1/calculate/net-pay`** — stateless; caller provides gross, deduction list, and tax elections. Returns a full check-stub breakdown. Used for estimates, what-if scenarios, and UI confirmation screens. Gated by `benefit:calculate` scope.
 - **`GET /api/v1/payments/{id}/net-pay`** — read-only DB-backed preview. Resolves the payment's active `DeductionOrder` rows and `TaxWithholdingElection` rows and returns the projected breakdown. Safe to call repeatedly.
 - **`POST /api/v1/payments/{id}/apply-net-pay`** — write path. Persists `PaymentDeduction` rows and updates `net_amount`. Idempotency guard: raises 409 if deductions are already applied. Gated by `member:write`.
 
-**Math order:**
+**Net pay math order:**
 ```
 gross
-− pre-tax deductions        (reduce taxable base)
+− pre-tax deductions              (reduce taxable base)
 = taxable gross
-− federal income tax        (IRS Pub 15-T annualized percentage method)
-− state income tax          (Illinois flat 4.95%; extensible to other jurisdictions)
-− post-tax deductions
+− federal income tax              (IRS Pub 15-T annualized percentage method)
+− state income tax                (Illinois flat 4.95%; extensible to other jurisdictions)
+− post-tax deductions             (internal; no external payee)
+− third-party disbursements       (routed to external entities — courts, unions, etc.)
 = net pay
 ```
 
 SS and Medicare are not applicable to pension annuity payments and are intentionally omitted.
 
+**W-4P form version:** The engine implements the **2020-redesigned Form W-4P only** (Steps 1–4: filing status, multiple-jobs checkbox, dependent credits, other income/deductions, extra withholding). The pre-2020 allowance-based form (withholding allowances × per-allowance dollar amount) is not supported. See the legacy W-4P backlog item below.
+
 **Tax config:** Brackets loaded from `system_configurations` via `get_config()`:
-- Key `federal_income_tax_withholding` — IRS Pub 15-T percentage method tables (standard withholding deduction by filing status + graduated brackets). Seeded for 2025.
+- Key `federal_income_tax_withholding` — IRS Pub 15-T percentage method tables. Seeded for 2025 and 2026. The 2025 config uses a single `standard_withholding_deduction` subtracted before brackets; the 2026 config restructured this: a smaller `standard_withholding_deduction` (line 1g) is subtracted, and the bracket tables include a 0% band at the bottom — plus a separate `step2_brackets` section for the Step 2 checkbox case (replaces the 2025 halved-deduction approach). The formula auto-detects which format is in use by checking for the `step2_brackets` key.
 - Key `illinois_income_tax` — flat rate + description. Seeded for 2025.
 
 Both are effective-dated — seed a new row each year when IRS publishes updated brackets. The config service's `as_of` lookup handles year selection automatically.
 
-**Response schema:** `NetPayResult` contains `pretax_deductions`, `taxable_gross`, `tax_withholdings`, `posttax_deductions`, `net_amount`, and running totals — everything needed to render a check stub.
+**Response schemas:**
+- `TaxWithholdingResult` — per-jurisdiction results from the standalone endpoint. Federal formula path populates all Worksheet 1B steps (`annualized_gross`, `line_1g_deduction`, `adjusted_annual_income`, `tentative_annual_tax`, `annual_tax`, `per_period_tax`, `total_withheld`). Flat-amount, exempt, and non-federal jurisdictions only populate `total_withheld`.
+- `NetPayResult` — full check-stub breakdown from the net-pay endpoints. Contains `pretax_deductions`, `taxable_gross`, `tax_withholdings`, `posttax_deductions`, `third_party_disbursements`, `net_amount`, and running totals.
+
+**Service internals:** `_federal_formula_steps()` owns the full Worksheet 1B computation and returns a `TaxWithholdingLineItem`. `_compute_federal_withholding()` is a thin wrapper that extracts `total_withheld` for the net-pay engine — both entry points share the same arithmetic.
 
 Service: `app/services/net_pay_service.py`. Schemas: `app/schemas/net_pay.py`.
 
@@ -415,9 +423,17 @@ CRUD endpoints under `/api/v1/third-party-entities` (admin scope). Deactivation 
 
 Service: `app/services/third_party_entity_service.py`.
 
-### Tax withholding calculation engine (backlog — superseded by net pay engine)
+### Legacy W-4P support (backlog — not yet implemented)
 
-The net pay engine (`net_pay_service.py`) now handles tax withholding as part of the full check-stub calculation. A separate dedicated `/calculate/tax-withholding` endpoint is no longer planned.
+The engine implements the 2020-redesigned Form W-4P only. Funds migrating existing members may have elections on file from the pre-2020 allowance-based form, which used a withholding allowances count × a per-allowance dollar amount (e.g., $4,300/allowance in 2019) subtracted from annualized income before applying brackets.
+
+**When this becomes relevant:** Any fund with members who last filed a W-4P before 2020 and have not refiled on the new form.
+
+**What to implement:**
+- Add `allowances` (integer) and `allowance_year` fields to `TaxWithholdingElection` and `NetPayTaxElectionInput` / `TaxWithholdingRequest`
+- Seed `federal_withholding_allowance_amounts` in `system_configurations` keyed by year (the IRS-published per-allowance dollar amount for each tax year)
+- In `_federal_formula_steps()`: when `allowances` is set and > 0, subtract `allowances × allowance_amount` from annualized income before applying brackets (per-allowance deduction replaces the line 1g standard deduction for that election)
+- Data model note: allowance-based and step-based elections cannot coexist on the same row — consider a `form_version: "pre2020" | "2020+"` discriminator column
 
 ### Routing number validation (backlog — not yet implemented)
 
@@ -579,8 +595,8 @@ All fund-level operational rules live in the `system_configurations` table. Each
 | `employment_types` | `{"types": [...]}` | Whitelist of valid employment type strings |
 | `leave_types` | `{"types": [...]}` | Whitelist of valid leave type strings |
 | `fund_calculation_config` | See `app/schemas/fund_config.py` (`FundConfig`) | All benefit calculation parameters; optional — falls back to SURS defaults if absent |
-| `federal_income_tax_withholding` | `{"tax_year": int, "standard_withholding_deduction": {filing_status: amount}, "brackets": {filing_status: [{min, max, rate, base_tax}]}}` | IRS Pub 15-T annualized percentage method — used by net pay engine |
-| `illinois_income_tax` | `{"tax_year": int, "rate": float}` | Illinois flat income tax rate — used by net pay engine |
+| `federal_income_tax_withholding` | 2025: `{"tax_year", "standard_withholding_deduction": {status: amt}, "higher_withholding_deduction": {status: amt}, "brackets": {status: [{min,max,rate,base_tax}]}}`; 2026+: same but `step2_brackets` replaces `higher_withholding_deduction` and brackets include a 0% band | IRS Pub 15-T annualized percentage method — used by net pay and tax-withholding engines |
+| `illinois_income_tax` | `{"tax_year": int, "rate": float}` | Illinois flat income tax rate — used by net pay and tax-withholding engines |
 
 ### Keys required at go-live (not yet seeded)
 
