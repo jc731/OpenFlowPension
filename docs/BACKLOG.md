@@ -89,6 +89,16 @@ Validate ABA routing numbers against the Federal Reserve EPRD (downloadable CSV 
 
 ---
 
+## Form submission ingest
+
+The `form_submissions` table and `FormSubmission` model already exist (stubbed alongside the document generation framework). The table tracks the sent → returned lifecycle with `return_data` JSONB and `status`: sent | returned | ingested | expired | cancelled.
+
+**What's missing:** The ingest path — parsing a returned form's data, validating fields, and writing the appropriate records (election changes, address updates, etc.) back to the member record. This is tightly coupled to specific form types and should be built per-form when a fund requests e-form processing.
+
+**Design note:** Each ingestable form type will likely need a dedicated parser that maps `return_data` keys to the appropriate service calls (e.g., a returned W-4P form → `TaxWithholdingElection` row). Consider a registry pattern analogous to `CONTEXT_PROVIDERS`.
+
+---
+
 ## Member portal frontend
 
 Separate frontend from the admin/LOB app. Architecture undecided (Astro, Vite, etc.) — evaluate when feature scope is clearer.

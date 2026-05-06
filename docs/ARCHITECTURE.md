@@ -288,6 +288,7 @@ All fund rules in `system_configurations` (`key`, `config_value` JSONB, `effecti
 | `fund_calculation_config` | See `app/schemas/fund_config.py` | Benefit calc params; optional (falls back to SURS defaults) |
 | `federal_income_tax_withholding` | 2025: `{standard_withholding_deduction, higher_withholding_deduction, brackets}`; 2026+: `{standard_withholding_deduction, brackets (with 0% band), step2_brackets}` | IRS Pub 15-T percentage method |
 | `illinois_income_tax` | `{"tax_year": int, "rate": float}` | Illinois flat income tax rate |
+| `fund_info` | `{"name", "short_name", "address", "phone", "website", "email"}` | Fund letterhead data for document generation |
 
 ### Keys required at go-live
 
@@ -327,6 +328,89 @@ All fund rules in `system_configurations` (`key`, `config_value` JSONB, `effecti
 Jane Smith — born 1965-03-15, hired 2000-01-15 at State University of Illinois, general staff, 100% time, Tier I Traditional. Retires 2025-01-15 after 25 years. Service credit entries span both accrual rule periods. Primary beneficiary: spouse Robert Smith.
 
 `make seed` should print ~25.0 total service credit years.
+
+---
+
+## Document generation framework
+
+Service files: `app/services/document_context_providers.py` · `app/services/document_assembler.py` · `app/services/document_renderer.py` · `app/services/document_service.py`  
+Templates: `app/templates/documents/` (Jinja2 HTML → WeasyPrint PDF)  
+Models: `app/models/document.py` — `DocumentTemplate`, `GeneratedDocument`, `FormSubmission`
+
+### Design: declarative context spec (Option B)
+
+Each `DocumentTemplate` row has a `config_value["context"]` list of named provider strings. The assembler calls each provider in sequence and merges the results into the template context. Adding a new letter for a new fund is a DB row + an HTML file — no Python required if the needed data is already covered by existing providers.
+
+```
+document_templates.config_value = {"context": ["member_info", "benefit_estimate"], "title": "..."}
+                                              ↓
+                               document_assembler.assemble()
+                                              ↓
+                    CONTEXT_PROVIDERS["member_info"](member_id, params, session) → dict
+                    CONTEXT_PROVIDERS["benefit_estimate"](member_id, params, session) → dict
+                                              ↓
+                              merged context dict → Jinja2 → WeasyPrint → PDF bytes
+```
+
+`fund_info` is always injected first (letterhead data) even if not listed in `config_value["context"]`.
+
+### Context providers (`app/services/document_context_providers.py`)
+
+Each provider: `async def name(member_id, params, session) -> dict`. Registered in `CONTEXT_PROVIDERS` at bottom of file.
+
+| Provider | Keys returned |
+|---|---|
+| `fund_info` | `fund_name`, `fund_short_name`, `fund_address`, `fund_phone`, `fund_website`, `fund_email`, `document_date` |
+| `member_info` | `member_number`, `member_full_name`, `member_dob`, `member_status`, `member_certification_date`, address fields |
+| `employment_summary` | `employer_name`, `employment_type`, `hire_date`, `termination_date`, `percent_time`, `is_active_employment` |
+| `service_credit_summary` | `total_service_credit_years`, `total_service_credit_display` |
+| `contribution_summary` | `total_employee_contributions`, `total_employer_contributions`, `total_contributions` |
+| `benefit_estimate` | `estimate_*` fields; requires `retirement_date` in `params`; lazy-imports `benefit_estimate_service` |
+| `tax_elections` | `tax_elections` list of active elections |
+| `beneficiaries` | `primary_beneficiaries`, `contingent_beneficiaries` lists |
+
+Adding a new provider: write the async function, register it in `CONTEXT_PROVIDERS`, reference by name in a `DocumentTemplate.config_value["context"]`. No changes needed in assembler or service.
+
+### Option A escape hatch
+
+`EXPLICIT_ASSEMBLERS: dict[str, Callable]` in `app/services/document_assembler.py` — register a per-slug Python assembler that bypasses the declarative path entirely. Coexists with Option B; migration is per-document. Useful when a document requires logic that doesn't fit the context-provider model.
+
+```python
+EXPLICIT_ASSEMBLERS["my_complex_letter"] = async def(member_id, params, session) -> dict: ...
+```
+
+### Renderer and test isolation
+
+`app/services/document_renderer.py`:
+- `render_to_html(template_file, context) -> str` — Jinja2 FileSystemLoader from `app/templates/documents/`
+- `html_to_pdf(html) -> bytes` — WeasyPrint (lazy import)
+- `render_to_pdf(template_file, context) -> bytes` — convenience wrapper
+
+`generate_for_member()` accepts an injectable `_renderer` parameter with signature `(template_file: str, context: dict) -> bytes`. Tests pass a stub; production uses `render_to_pdf`. This keeps WeasyPrint out of the test suite entirely.
+
+### Tables
+
+- `document_templates` — one row per document type. `slug` unique. `config_value` JSONB holds `context` list plus any template-specific config.
+- `generated_documents` — one row per generated PDF. `content: LargeBinary` stores PDF bytes (move to object storage when volumes warrant). `params` JSONB stores inputs for audit.
+- `form_submissions` — stubs the form return lifecycle. `sent_at`, `returned_at`, `return_data` JSONB, `status`: sent | returned | ingested | expired | cancelled. Form ingest logic not yet implemented.
+
+### Endpoints (`app/api/v1/routers/documents.py`)
+
+- `GET /document-templates` — list active templates (`admin` scope)
+- `POST /document-templates` — register new template (`admin` scope)
+- `POST /documents/generate` — generate, persist, return metadata (`member:read` scope)
+- `GET /members/{id}/documents` — list generated docs for member (`member:read` scope)
+- `GET /documents/{id}/download` — stream `application/pdf` response
+
+### Template authoring
+
+`app/templates/documents/_base.html` — Jinja2 base with WeasyPrint `@page` CSS (letter, 1in margins, page X of Y footer), `.letterhead` block using fund contact data, `.data-table` with SURS-blue header styling. All letters extend this via `{% extends "_base.html" %}`.
+
+Scaffold helper: `python scripts/scaffold_document.py <slug> <type> --context p1 p2` — creates a starter HTML template with context variable hints and prints the DB seed entry.
+
+### Multi-fund portability
+
+All fund-specific letterhead data comes from the `fund_info` system config key. Fund B's documents are DB rows + HTML templates — zero code changes required if existing providers cover the needed data.
 
 ---
 
