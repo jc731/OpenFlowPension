@@ -221,6 +221,21 @@ async def seed():
                     superseded_date=None,
                     note="IL flat rate 4.95%",
                 ),
+                # ── Payroll validation thresholds ─────────────────────────────
+                dict(
+                    config_key="payroll_validation_config",
+                    config_value={
+                        "max_gross_earnings": 50000,
+                        "max_days_per_period": 31,
+                        "employee_contribution_rate": 0.08,
+                        "employer_contribution_rate": 0.05,
+                        "contribution_rate_tolerance": 0.005,
+                        "mode": "warn",
+                    },
+                    effective_date=date(2024, 1, 1),
+                    superseded_date=None,
+                    note="Fund-level payroll validation thresholds; mode=warn flags rows without rejecting",
+                ),
             ]
 
             config_rows = {}

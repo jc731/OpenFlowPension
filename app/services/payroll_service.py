@@ -29,6 +29,7 @@ from app.models.payroll import ContributionRecord, PayrollReport, PayrollReportR
 from app.models.service_credit import ServiceCreditEntry
 from app.schemas.payroll import PayrollReportCreate, PayrollRowInput
 from app.services.config_service import ConfigNotFoundError, get_config
+from app.services.payroll_validation_service import validate_fund, validate_system
 
 
 # ── CSV expected columns ───────────────────────────────────────────────────────
@@ -228,7 +229,17 @@ async def ingest_json(
     session.add(report)
     await session.flush()
 
+    # Load fund validation config once per report (None if not seeded)
+    fund_validation_config: dict | None = None
+    if data.rows:
+        try:
+            cfg = await get_config("payroll_validation_config", data.rows[0].period_end, session)
+            fund_validation_config = cfg.config_value
+        except ConfigNotFoundError:
+            pass
+
     row_statuses: list[str] = []
+    warned_count = 0
     for row_input in data.rows:
         row = PayrollReportRow(
             payroll_report_id=report.id,
@@ -243,12 +254,39 @@ async def ingest_json(
         )
         session.add(row)
         await session.flush()
+
+        # Level 1: system validation (structural hard block)
+        system_errors = validate_system(row_input)
+        if system_errors:
+            row.status = "error"
+            row.error_message = "; ".join(system_errors)
+            row_statuses.append(row.status)
+            continue
+
+        # Level 2: fund validation (threshold warnings)
+        fund_warnings = validate_fund(row_input, fund_validation_config or {})
+        if fund_warnings:
+            row.validation_warnings = fund_warnings
+            warned_count += 1
+            reject_mode = (fund_validation_config or {}).get("mode", "warn") == "reject"
+            if reject_mode:
+                row.status = "error"
+                row.error_message = "Fund validation: " + "; ".join(fund_warnings)
+                row_statuses.append(row.status)
+                continue
+
         await _process_row(row, employer_id, session)
+
+        # Promote applied → flagged when fund warnings exist
+        if row.status == "applied" and fund_warnings:
+            row.status = "flagged"
+
         row_statuses.append(row.status)
 
-    report.processed_count = row_statuses.count("applied")
+    report.processed_count = row_statuses.count("applied") + row_statuses.count("flagged")
     report.error_count = row_statuses.count("error")
     report.skipped_count = row_statuses.count("skipped")
+    report.warning_count = warned_count
     report.status = "completed"
     await session.refresh(report, ["rows"])
     return report

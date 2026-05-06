@@ -39,6 +39,7 @@ class PayrollReport(Base):
     processed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    warning_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     submitted_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -78,9 +79,10 @@ class PayrollReportRow(Base):
     employer_contribution: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     days_worked: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # pending | applied | error | skipped
+    # pending | applied | flagged | error | skipped
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending", server_default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validation_warnings: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # Original row preserved verbatim for audit
     raw_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")

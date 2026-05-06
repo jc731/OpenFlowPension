@@ -299,3 +299,155 @@ async def test_list_payroll_reports(session):
 
     reports = await list_payroll_reports(employer.id, session)
     assert len(reports) == 2
+
+
+# ── Validation integration tests ─────────────────────────────────────────────
+
+async def _setup_with_fund_validation(session):
+    """Extends _setup() with a payroll_validation_config row."""
+    employer, member, employment = await _setup(session)
+    fund_config = SystemConfiguration(
+        config_key="payroll_validation_config",
+        config_value={
+            "max_gross_earnings": 10000,
+            "max_days_per_period": 25,
+            "employee_contribution_rate": 0.08,
+            "employer_contribution_rate": 0.05,
+            "contribution_rate_tolerance": 0.005,
+            "mode": "warn",
+        },
+        effective_date=date(2020, 1, 1),
+        superseded_date=None,
+    )
+    session.add(fund_config)
+    await session.flush()
+    return employer, member, employment
+
+
+async def test_system_validation_blocks_inverted_period(session):
+    async with session.begin():
+        employer, _, _ = await _setup(session)
+        bad_row = PayrollRowInput(
+            member_number="PRY-001",
+            period_start=date(2025, 1, 31),
+            period_end=date(2025, 1, 1),  # inverted
+            gross_earnings=Decimal("5000.00"),
+            employee_contribution=Decimal("400.00"),
+            employer_contribution=Decimal("250.00"),
+            days_worked=20,
+        )
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=[bad_row]), session)
+
+    assert report.rows[0].status == "error"
+    assert "before period_start" in report.rows[0].error_message
+    assert report.error_count == 1
+    assert report.processed_count == 0
+
+
+async def test_system_validation_blocks_impossible_days(session):
+    async with session.begin():
+        employer, _, _ = await _setup(session)
+        bad_row = PayrollRowInput(
+            member_number="PRY-001",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 1, 31),
+            gross_earnings=Decimal("5000.00"),
+            employee_contribution=Decimal("400.00"),
+            employer_contribution=Decimal("250.00"),
+            days_worked=32,  # more than January has
+        )
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=[bad_row]), session)
+
+    assert report.rows[0].status == "error"
+    assert "exceeds calendar days" in report.rows[0].error_message
+
+
+async def test_fund_validation_flags_row_in_warn_mode(session):
+    async with session.begin():
+        employer, _, _ = await _setup_with_fund_validation(session)
+        # Gross $12,000 exceeds max $10,000 — should flag, not block
+        flagged_row = PayrollRowInput(
+            member_number="PRY-001",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 1, 31),
+            gross_earnings=Decimal("12000.00"),
+            employee_contribution=Decimal("960.00"),   # exact 8%
+            employer_contribution=Decimal("600.00"),   # exact 5%
+            days_worked=20,
+        )
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=[flagged_row]), session)
+
+    row = report.rows[0]
+    assert row.status == "flagged"
+    assert row.validation_warnings is not None
+    assert any("gross_earnings" in w for w in row.validation_warnings)
+    # processed_count includes flagged rows (they were applied)
+    assert report.processed_count == 1
+    assert report.warning_count == 1
+    assert report.error_count == 0
+
+
+async def test_fund_validation_reject_mode_blocks_row(session):
+    async with session.begin():
+        employer, _, _ = await _setup(session)
+        reject_config = SystemConfiguration(
+            config_key="payroll_validation_config",
+            config_value={
+                "max_gross_earnings": 10000,
+                "mode": "reject",
+            },
+            effective_date=date(2020, 1, 1),
+            superseded_date=None,
+        )
+        session.add(reject_config)
+        await session.flush()
+
+        big_row = PayrollRowInput(
+            member_number="PRY-001",
+            period_start=date(2025, 1, 1),
+            period_end=date(2025, 1, 31),
+            gross_earnings=Decimal("12000.00"),
+            employee_contribution=Decimal("960.00"),
+            employer_contribution=Decimal("600.00"),
+            days_worked=20,
+        )
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=[big_row]), session)
+
+    assert report.rows[0].status == "error"
+    assert "Fund validation" in report.rows[0].error_message
+    assert report.processed_count == 0
+    assert report.error_count == 1
+
+
+async def test_no_fund_config_still_processes_rows(session):
+    """Without payroll_validation_config seeded, rows apply normally."""
+    async with session.begin():
+        employer, _, _ = await _setup(session)
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=[_row()]), session)
+
+    assert report.rows[0].status == "applied"
+    assert report.warning_count == 0
+
+
+async def test_flagged_row_contributes_to_processed_count(session):
+    async with session.begin():
+        employer, _, _ = await _setup_with_fund_validation(session)
+        rows = [
+            _row(),  # clean — no warnings
+            PayrollRowInput(   # gross over limit — flagged
+                member_number="PRY-001",
+                period_start=date(2025, 2, 1),
+                period_end=date(2025, 2, 28),
+                gross_earnings=Decimal("15000.00"),
+                employee_contribution=Decimal("1200.00"),
+                employer_contribution=Decimal("750.00"),
+                days_worked=20,
+            ),
+        ]
+        report = await ingest_json(employer.id, PayrollReportCreate(rows=rows), session)
+
+    assert report.processed_count == 2  # applied + flagged
+    assert report.warning_count == 1
+    assert report.error_count == 0
+    statuses = {r.status for r in report.rows}
+    assert statuses == {"applied", "flagged"}

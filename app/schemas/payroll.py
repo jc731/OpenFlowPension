@@ -59,6 +59,7 @@ class PayrollReportRowRead(BaseModel):
     days_worked: int
     status: str
     error_message: str | None
+    validation_warnings: list[str] | None
     created_at: datetime
 
 
@@ -74,6 +75,7 @@ class PayrollReportRead(BaseModel):
     processed_count: int
     error_count: int
     skipped_count: int
+    warning_count: int
     submitted_by: uuid.UUID | None
     note: str | None
     created_at: datetime
