@@ -55,6 +55,9 @@ from app.schemas.net_pay import (
     NetPayResult,
     NetPayTaxElectionInput,
     PayFrequency,
+    TaxWithholdingLineItem,
+    TaxWithholdingRequest,
+    TaxWithholdingResult,
     ThirdPartyDisbursementInput,
 )
 from app.services.config_service import ConfigNotFoundError, get_config
@@ -101,13 +104,18 @@ def _is_exempt(election: NetPayTaxElectionInput) -> bool:
     return election.withholding_type == "exempt" or election.exempt
 
 
-def _compute_federal_withholding(
+def _federal_formula_steps(
     gross: Decimal,
     election: NetPayTaxElectionInput,
     pay_periods: int,
     config: dict[str, Any],
-) -> Decimal:
-    """IRS Pub 15-T Worksheet 1A — Percentage Method for pension/annuity payments.
+) -> TaxWithholdingLineItem:
+    """IRS Pub 15-T Worksheet 1B — full step-by-step federal withholding.
+
+    Returns a TaxWithholdingLineItem with every worksheet step populated so the
+    arithmetic is fully auditable.  Called by both the net-pay engine (which only
+    needs total_withheld) and the standalone tax-withholding endpoint (which exposes
+    all steps to callers).
 
     Supports two config structures:
     - 2025 style: `brackets` + `standard_withholding_deduction` / `higher_withholding_deduction`
@@ -115,11 +123,22 @@ def _compute_federal_withholding(
     - 2026+ style: `brackets` + `step2_brackets` + `standard_withholding_deduction`
       (Step 2 checked → dedicated bracket table, line 1g = $0)
     """
+    extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
+
     if _is_exempt(election):
-        return Decimal("0")
+        return TaxWithholdingLineItem(
+            jurisdiction="federal", filing_status=election.filing_status,
+            withholding_type="exempt", additional_withholding=extra,
+            total_withheld=Decimal("0"),
+        )
 
     if election.withholding_type == "flat_amount":
-        return max(Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP), Decimal("0"))
+        total = max(extra, Decimal("0"))
+        return TaxWithholdingLineItem(
+            jurisdiction="federal", filing_status=election.filing_status,
+            withholding_type="flat_amount", additional_withholding=extra,
+            total_withheld=total,
+        )
 
     # Try exact filing_status first; fall back to alias (handles 2026 per-status tables and
     # 2025 configs that only have single + married_filing_jointly bracket tables).
@@ -130,37 +149,73 @@ def _compute_federal_withholding(
         # 2026+ style: dedicated Step 2 checkbox bracket tables; line 1g = $0
         s2 = config["step2_brackets"]
         brackets = s2.get(fs) or s2.get(alias) or s2.get("single", [])
-        std_deduction = Decimal("0")
+        line_1g = Decimal("0")
     elif election.step_2_multiple_jobs:
         # 2025 style: halved standard deduction, same brackets
         std_deductions = config.get("higher_withholding_deduction", config["standard_withholding_deduction"])
         brackets = config["brackets"].get(fs) or config["brackets"].get(alias) or config["brackets"].get("single", [])
         std_val = std_deductions.get(fs) or std_deductions.get(alias) or std_deductions.get("single", 0)
-        std_deduction = Decimal(str(std_val))
+        line_1g = Decimal(str(std_val))
     else:
-        # Standard: line 1g reduction + standard bracket table
         brackets = config["brackets"].get(fs) or config["brackets"].get(alias) or config["brackets"].get("single", [])
         std_deductions = config["standard_withholding_deduction"]
         std_val = std_deductions.get(fs) or std_deductions.get(alias) or std_deductions.get("single", 0)
-        std_deduction = Decimal(str(std_val))
+        line_1g = Decimal(str(std_val))
 
-    # Worksheet 1A steps:
-    # 1c: annualize
-    annualized = gross * pay_periods
-    # 1d+1e: add Step 4(a) other income
-    annualized += Decimal(str(election.step_4a_other_income))
-    # 1f+1g+1h: reduction = Step 4(b) + line-1g std deduction amount
-    reduction = Decimal(str(election.step_4b_deductions)) + std_deduction
-    # 1i: adjusted annual wage
-    adjusted = max(annualized - reduction, Decimal("0"))
-    # 2a-2g: apply bracket table
-    tentative_annual = _apply_brackets(adjusted, brackets)
-    # 3a-3c: subtract Step 3 dependent credit (dollar-for-dollar, not income reduction)
-    annual_tax = max(tentative_annual - Decimal(str(election.step_3_dependent_credit)), Decimal("0"))
-    # 4a-4b: de-annualize and add Step 4(c) extra withholding
-    per_period = (annual_tax / pay_periods).quantize(_TWO, rounding=ROUND_HALF_UP)
+    # Worksheet 1B:
+    step_4a = Decimal(str(election.step_4a_other_income))
+    step_4b = Decimal(str(election.step_4b_deductions))
+    step_3  = Decimal(str(election.step_3_dependent_credit))
+
+    annualized   = gross * pay_periods + step_4a          # Lines 1c + 1e
+    reduction    = step_4b + line_1g                      # Lines 1f + 1g
+    adjusted     = max(annualized - reduction, Decimal("0"))  # Line 1i
+    tentative    = _apply_brackets(adjusted, brackets)    # Lines 2a-2g
+    annual_tax   = max(tentative - step_3, Decimal("0")) # Line 3c
+    per_period   = (annual_tax / pay_periods).quantize(_TWO, rounding=ROUND_HALF_UP)
+    total        = max(per_period + extra, Decimal("0"))
+
+    return TaxWithholdingLineItem(
+        jurisdiction="federal",
+        filing_status=fs,
+        withholding_type="formula",
+        annualized_gross=annualized,
+        step_4a_income_added=step_4a,
+        step_4b_deductions_applied=step_4b,
+        line_1g_deduction=line_1g,
+        adjusted_annual_income=adjusted,
+        tentative_annual_tax=tentative,
+        step_3_credit_applied=step_3,
+        annual_tax=annual_tax,
+        per_period_tax=per_period,
+        additional_withholding=extra,
+        total_withheld=total,
+    )
+
+
+def _compute_federal_withholding(
+    gross: Decimal,
+    election: NetPayTaxElectionInput,
+    pay_periods: int,
+    config: dict[str, Any],
+) -> Decimal:
+    return _federal_formula_steps(gross, election, pay_periods, config).total_withheld
+
+
+def _illinois_formula_steps(
+    gross: Decimal,
+    election: NetPayTaxElectionInput,
+    config: dict[str, Any],
+) -> TaxWithholdingLineItem:
     extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
-    return max(per_period + extra, Decimal("0"))
+    total = _compute_illinois_withholding(gross, election, config)
+    return TaxWithholdingLineItem(
+        jurisdiction="illinois",
+        filing_status=election.filing_status,
+        withholding_type=election.withholding_type if not election.exempt else "exempt",
+        additional_withholding=extra,
+        total_withheld=total,
+    )
 
 
 def _compute_illinois_withholding(
@@ -283,6 +338,67 @@ def calculate_net_pay(
         payment_date=payment_date,
         tax_year=payment_date.year,
         pay_frequency=pay_frequency,
+    )
+
+
+# ── Standalone tax-withholding calculation ────────────────────────────────────
+
+def compute_tax_withholding(
+    gross: Decimal,
+    elections: list[NetPayTaxElectionInput],
+    payment_date: date,
+    pay_frequency: PayFrequency,
+    federal_tax_config: dict[str, Any] | None,
+    illinois_tax_config: dict[str, Any] | None,
+) -> TaxWithholdingResult:
+    """Pure function — no DB access.
+
+    Computes per-period federal and state withholding for a given gross amount
+    and set of W-4P elections.  Returns full Worksheet 1B step detail for federal
+    formula calculations.
+
+    gross is treated as the full taxable amount (no pre-tax deductions).  If you
+    have pre-tax deductions to account for, pass the post-deduction amount here
+    or use the net-pay engine instead.
+    """
+    pay_periods = PAY_PERIODS[pay_frequency]
+    lines: list[TaxWithholdingLineItem] = []
+
+    for election in elections:
+        j = election.jurisdiction.lower()
+        if j == "federal":
+            if federal_tax_config is None:
+                raise ConfigNotFoundError("federal_income_tax_withholding config not found")
+            lines.append(_federal_formula_steps(gross, election, pay_periods, federal_tax_config))
+        elif j == "illinois":
+            if illinois_tax_config is None:
+                raise ConfigNotFoundError("illinois_income_tax config not found")
+            lines.append(_illinois_formula_steps(gross, election, illinois_tax_config))
+
+    total = (sum(l.total_withheld for l in lines) or Decimal("0")).quantize(_TWO, rounding=ROUND_HALF_UP)
+    return TaxWithholdingResult(
+        gross_amount=gross,
+        pay_frequency=pay_frequency,
+        payment_date=payment_date,
+        tax_year=payment_date.year,
+        withholdings=lines,
+        total_withheld=total,
+    )
+
+
+async def compute_tax_withholding_stateless(
+    req: TaxWithholdingRequest,
+    session: AsyncSession,
+) -> TaxWithholdingResult:
+    """Load tax configs from DB then delegate to the pure compute_tax_withholding()."""
+    federal_cfg, illinois_cfg = await _load_tax_configs(req.payment_date, session)
+    return compute_tax_withholding(
+        gross=Decimal(str(req.gross_amount)),
+        elections=req.elections,
+        payment_date=req.payment_date,
+        pay_frequency=req.pay_frequency,
+        federal_tax_config=federal_cfg,
+        illinois_tax_config=illinois_cfg,
     )
 
 

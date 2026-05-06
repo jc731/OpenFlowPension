@@ -88,6 +88,55 @@ class NetPayLineItem(BaseModel):
     third_party_entity_name: str | None = None
 
 
+class TaxWithholdingRequest(BaseModel):
+    """Input for the stateless POST /calculate/tax-withholding endpoint.
+
+    Accepts any combination of W-4P elections (federal, Illinois, future jurisdictions).
+    gross_amount is treated as the full taxable amount — no deductions are applied here.
+    Use /calculate/net-pay when you also have pre-tax deductions to factor in.
+    """
+    gross_amount: Decimal = Field(gt=0)
+    payment_date: date
+    pay_frequency: PayFrequency = "monthly"
+    elections: list[NetPayTaxElectionInput] = []
+
+
+class TaxWithholdingLineItem(BaseModel):
+    """Per-jurisdiction withholding with full calculation detail.
+
+    Federal formula: all Worksheet 1B step fields are populated so the arithmetic
+    is auditable end-to-end.  All other withholding types (flat_amount, exempt) and
+    non-federal jurisdictions (illinois) leave the worksheet fields as None.
+    """
+    jurisdiction: str
+    filing_status: str
+    withholding_type: WithholdingType
+
+    # IRS Pub 15-T Worksheet 1B steps — federal formula path only
+    annualized_gross: Decimal | None = None           # Line 1c: gross × pay_periods
+    step_4a_income_added: Decimal | None = None       # Line 1e: Step 4(a) other income
+    step_4b_deductions_applied: Decimal | None = None # Line 1f: Step 4(b) deductions
+    line_1g_deduction: Decimal | None = None          # Line 1g: std withholding amount ($0 if Step 2)
+    adjusted_annual_income: Decimal | None = None     # Line 1i: clamped ≥ 0
+    tentative_annual_tax: Decimal | None = None       # Lines 2a-2g: bracket result
+    step_3_credit_applied: Decimal | None = None      # Line 3a: dependent credit
+    annual_tax: Decimal | None = None                 # Line 3c: clamped ≥ 0
+    per_period_tax: Decimal | None = None             # Line 4a: annual_tax / pay_periods
+
+    additional_withholding: Decimal = Decimal("0")    # Step 4(c) extra per period
+    total_withheld: Decimal                           # Final amount withheld this period
+
+
+class TaxWithholdingResult(BaseModel):
+    """Response for POST /calculate/tax-withholding."""
+    gross_amount: Decimal
+    pay_frequency: PayFrequency
+    payment_date: date
+    tax_year: int
+    withholdings: list[TaxWithholdingLineItem]
+    total_withheld: Decimal
+
+
 class NetPayResult(BaseModel):
     """Full check-stub breakdown — everything needed to render or persist a payment.
 

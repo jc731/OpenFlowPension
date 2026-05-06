@@ -4,11 +4,41 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_scope
-from app.schemas.net_pay import NetPayRequest, NetPayResult
+from app.schemas.net_pay import (
+    NetPayRequest,
+    NetPayResult,
+    TaxWithholdingRequest,
+    TaxWithholdingResult,
+)
 from app.services import net_pay_service as svc
 from app.services.config_service import ConfigNotFoundError
 
 router = APIRouter(tags=["net-pay"])
+
+
+@router.post("/calculate/tax-withholding", response_model=TaxWithholdingResult)
+async def calculate_tax_withholding(
+    req: TaxWithholdingRequest,
+    session: AsyncSession = Depends(get_db),
+    principal=Depends(get_current_user),
+):
+    """Stateless W-4P / state tax withholding calculation.
+
+    Accepts a gross payment amount and one or more tax elections; returns the
+    per-period withholding for each jurisdiction.  Federal results include all
+    IRS Pub 15-T Worksheet 1B intermediate steps so the arithmetic is fully
+    auditable.
+
+    Does not read member records or apply deductions.  Use this endpoint for:
+    - Member-facing W-4P calculators ("what will my withholding be?")
+    - External payroll or HR systems that need IRS-accurate federal withholding
+    - Verifying elections before committing them to a member's tax record
+    """
+    require_scope(principal, "benefit:calculate")
+    try:
+        return await svc.compute_tax_withholding_stateless(req, session)
+    except ConfigNotFoundError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.post("/calculate/net-pay", response_model=NetPayResult)
