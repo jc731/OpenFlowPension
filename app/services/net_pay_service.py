@@ -68,7 +68,10 @@ PAY_PERIODS: dict[str, int] = {
     "weekly": 52,
 }
 
-# Single bracket table used for these filing statuses
+# Fallback alias: used when a filing status has no dedicated bracket table in the config.
+# 2025 config: only single + married_filing_jointly brackets → all others alias to one of these.
+# 2026 config: adds head_of_household brackets → the exact-first lookup in _compute_federal_withholding
+# uses HOH directly; the alias is only reached for married_filing_separately and qualifying_surviving_spouse.
 _FILING_STATUS_ALIAS: dict[str, str] = {
     "married_filing_separately": "single",
     "head_of_household": "single",
@@ -104,38 +107,57 @@ def _compute_federal_withholding(
     pay_periods: int,
     config: dict[str, Any],
 ) -> Decimal:
-    """IRS Pub 15-T 2025 Worksheet 1 — Percentage Method for pension/annuity payments."""
+    """IRS Pub 15-T Worksheet 1A — Percentage Method for pension/annuity payments.
+
+    Supports two config structures:
+    - 2025 style: `brackets` + `standard_withholding_deduction` / `higher_withholding_deduction`
+      (Step 2 checked → halved deduction, same brackets)
+    - 2026+ style: `brackets` + `step2_brackets` + `standard_withholding_deduction`
+      (Step 2 checked → dedicated bracket table, line 1g = $0)
+    """
     if _is_exempt(election):
         return Decimal("0")
 
     if election.withholding_type == "flat_amount":
         return max(Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP), Decimal("0"))
 
-    # Select standard deduction table based on Step 2 checkbox
-    std_table_key = "higher_withholding_deduction" if election.step_2_multiple_jobs else "standard_withholding_deduction"
-    std_deductions: dict[str, float] = config[std_table_key]
-    brackets_by_status: dict[str, list[dict]] = config["brackets"]
+    # Try exact filing_status first; fall back to alias (handles 2026 per-status tables and
+    # 2025 configs that only have single + married_filing_jointly bracket tables).
+    fs = election.filing_status
+    alias = _FILING_STATUS_ALIAS.get(fs, fs)
 
-    status_key = _FILING_STATUS_ALIAS.get(election.filing_status, election.filing_status)
-    brackets = brackets_by_status.get(status_key) or brackets_by_status.get("single", [])
-    std_deduction = Decimal(str(std_deductions.get(status_key, std_deductions.get("single", 0))))
+    if election.step_2_multiple_jobs and "step2_brackets" in config:
+        # 2026+ style: dedicated Step 2 checkbox bracket tables; line 1g = $0
+        s2 = config["step2_brackets"]
+        brackets = s2.get(fs) or s2.get(alias) or s2.get("single", [])
+        std_deduction = Decimal("0")
+    elif election.step_2_multiple_jobs:
+        # 2025 style: halved standard deduction, same brackets
+        std_deductions = config.get("higher_withholding_deduction", config["standard_withholding_deduction"])
+        brackets = config["brackets"].get(fs) or config["brackets"].get(alias) or config["brackets"].get("single", [])
+        std_val = std_deductions.get(fs) or std_deductions.get(alias) or std_deductions.get("single", 0)
+        std_deduction = Decimal(str(std_val))
+    else:
+        # Standard: line 1g reduction + standard bracket table
+        brackets = config["brackets"].get(fs) or config["brackets"].get(alias) or config["brackets"].get("single", [])
+        std_deductions = config["standard_withholding_deduction"]
+        std_val = std_deductions.get(fs) or std_deductions.get(alias) or std_deductions.get("single", 0)
+        std_deduction = Decimal(str(std_val))
 
-    # Step 1: annualize and add Step 4(a) other income
-    annualized = gross * pay_periods + Decimal(str(election.step_4a_other_income))
-
-    # Step 2: subtract standard deduction and Step 4(b) deductions
-    adjusted = max(
-        annualized - std_deduction - Decimal(str(election.step_4b_deductions)),
-        Decimal("0"),
-    )
-
-    # Step 3: apply brackets
+    # Worksheet 1A steps:
+    # 1c: annualize
+    annualized = gross * pay_periods
+    # 1d+1e: add Step 4(a) other income
+    annualized += Decimal(str(election.step_4a_other_income))
+    # 1f+1g+1h: reduction = Step 4(b) + line-1g std deduction amount
+    reduction = Decimal(str(election.step_4b_deductions)) + std_deduction
+    # 1i: adjusted annual wage
+    adjusted = max(annualized - reduction, Decimal("0"))
+    # 2a-2g: apply bracket table
     tentative_annual = _apply_brackets(adjusted, brackets)
-
-    # Step 4: subtract Step 3 dependent credit (dollar-for-dollar tax reduction)
+    # 3a-3c: subtract Step 3 dependent credit (dollar-for-dollar, not income reduction)
     annual_tax = max(tentative_annual - Decimal(str(election.step_3_dependent_credit)), Decimal("0"))
-
-    # Step 5: de-annualize and add Step 4(c) extra withholding
+    # 4a-4b: de-annualize and add Step 4(c) extra withholding
     per_period = (annual_tax / pay_periods).quantize(_TWO, rounding=ROUND_HALF_UP)
     extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
     return max(per_period + extra, Decimal("0"))

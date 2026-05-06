@@ -65,6 +65,86 @@ FEDERAL_CONFIG = {
 
 ILLINOIS_CONFIG = {"tax_year": 2025, "rate": 0.0495}
 
+# IRS Pub 15-T 2026 — fetched directly from irs.gov/publications/p15t.
+# Structural change from 2025: standard deduction (line 1g) is smaller because a 0% band is
+# baked into the bracket tables. Step 2 checkbox uses dedicated tables (not a halved deduction).
+FEDERAL_CONFIG_2026 = {
+    "tax_year": 2026,
+    "standard_withholding_deduction": {
+        "single": 8600,
+        "married_filing_separately": 8600,
+        "head_of_household": 8600,
+        "married_filing_jointly": 12900,
+        "qualifying_surviving_spouse": 12900,
+    },
+    "brackets": {
+        "single": [
+            {"min": 0, "max": 7500, "rate": 0.00, "base_tax": 0},
+            {"min": 7500, "max": 19900, "rate": 0.10, "base_tax": 0},
+            {"min": 19900, "max": 57900, "rate": 0.12, "base_tax": 1240.00},
+            {"min": 57900, "max": 113200, "rate": 0.22, "base_tax": 5800.00},
+            {"min": 113200, "max": 209275, "rate": 0.24, "base_tax": 17966.00},
+            {"min": 209275, "max": 263725, "rate": 0.32, "base_tax": 41024.00},
+            {"min": 263725, "max": 648100, "rate": 0.35, "base_tax": 58448.00},
+            {"min": 648100, "max": None, "rate": 0.37, "base_tax": 192979.25},
+        ],
+        "married_filing_jointly": [
+            {"min": 0, "max": 19300, "rate": 0.00, "base_tax": 0},
+            {"min": 19300, "max": 44100, "rate": 0.10, "base_tax": 0},
+            {"min": 44100, "max": 120100, "rate": 0.12, "base_tax": 2480.00},
+            {"min": 120100, "max": 230700, "rate": 0.22, "base_tax": 11600.00},
+            {"min": 230700, "max": 422850, "rate": 0.24, "base_tax": 35932.00},
+            {"min": 422850, "max": 531750, "rate": 0.32, "base_tax": 82048.00},
+            {"min": 531750, "max": 788000, "rate": 0.35, "base_tax": 116896.00},
+            {"min": 788000, "max": None, "rate": 0.37, "base_tax": 206583.50},
+        ],
+        "head_of_household": [
+            {"min": 0, "max": 15550, "rate": 0.00, "base_tax": 0},
+            {"min": 15550, "max": 33250, "rate": 0.10, "base_tax": 0},
+            {"min": 33250, "max": 83000, "rate": 0.12, "base_tax": 1770.00},
+            {"min": 83000, "max": 121250, "rate": 0.22, "base_tax": 7740.00},
+            {"min": 121250, "max": 217300, "rate": 0.24, "base_tax": 16155.00},
+            {"min": 217300, "max": 271750, "rate": 0.32, "base_tax": 39207.00},
+            {"min": 271750, "max": 656150, "rate": 0.35, "base_tax": 56631.00},
+            {"min": 656150, "max": None, "rate": 0.37, "base_tax": 191171.00},
+        ],
+    },
+    "step2_brackets": {
+        "single": [
+            {"min": 0, "max": 8050, "rate": 0.00, "base_tax": 0},
+            {"min": 8050, "max": 14250, "rate": 0.10, "base_tax": 0},
+            {"min": 14250, "max": 33250, "rate": 0.12, "base_tax": 620.00},
+            {"min": 33250, "max": 60900, "rate": 0.22, "base_tax": 2900.00},
+            {"min": 60900, "max": 108938, "rate": 0.24, "base_tax": 8983.00},
+            {"min": 108938, "max": 136163, "rate": 0.32, "base_tax": 20512.00},
+            {"min": 136163, "max": 328350, "rate": 0.35, "base_tax": 29224.00},
+            {"min": 328350, "max": None, "rate": 0.37, "base_tax": 96489.63},
+        ],
+        "married_filing_jointly": [
+            {"min": 0, "max": 16100, "rate": 0.00, "base_tax": 0},
+            {"min": 16100, "max": 28500, "rate": 0.10, "base_tax": 0},
+            {"min": 28500, "max": 66500, "rate": 0.12, "base_tax": 1240.00},
+            {"min": 66500, "max": 121800, "rate": 0.22, "base_tax": 5800.00},
+            {"min": 121800, "max": 217875, "rate": 0.24, "base_tax": 17966.00},
+            {"min": 217875, "max": 272325, "rate": 0.32, "base_tax": 41024.00},
+            {"min": 272325, "max": 400450, "rate": 0.35, "base_tax": 58448.00},
+            {"min": 400450, "max": None, "rate": 0.37, "base_tax": 103291.75},
+        ],
+        "head_of_household": [
+            {"min": 0, "max": 12075, "rate": 0.00, "base_tax": 0},
+            {"min": 12075, "max": 20925, "rate": 0.10, "base_tax": 0},
+            {"min": 20925, "max": 45800, "rate": 0.12, "base_tax": 885.00},
+            {"min": 45800, "max": 64925, "rate": 0.22, "base_tax": 3870.00},
+            {"min": 64925, "max": 112950, "rate": 0.24, "base_tax": 8077.50},
+            {"min": 112950, "max": 140175, "rate": 0.32, "base_tax": 19603.50},
+            {"min": 140175, "max": 332375, "rate": 0.35, "base_tax": 28315.50},
+            {"min": 332375, "max": None, "rate": 0.37, "base_tax": 95585.50},
+        ],
+    },
+}
+
+PAYMENT_DATE_2026 = date(2026, 3, 1)
+
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -754,3 +834,133 @@ async def test_stateless_endpoint_w4p_with_disbursement(session, tax_configs, th
     assert result.total_third_party_disbursements == Decimal("300")
     assert result.net_amount == Decimal("2551.50")
     assert result.third_party_disbursements[0].third_party_entity_name == "Cook County Clerk"
+
+
+# ── IRS Pub 15-T 2026 verified test values ─────────────────────────────────────
+# Expected values are computed directly from the official 2026 tables at irs.gov/publications/p15t.
+# Each test comment shows the full Worksheet 1B arithmetic so results are independently verifiable.
+
+def test_2026_single_3000_monthly():
+    # Single, $3,000/mo, no W-4P adjustments
+    #   Line 1c: $3,000 × 12 = $36,000
+    #   Line 1g (single, Step 2 not checked): $8,600
+    #   Line 1i: $36,000 − $8,600 = $27,400 adjusted annual income
+    #   Bracket (single): $27,400 in $19,900–$57,900 @ 12%, base $1,240
+    #   Annual tax: ($27,400 − $19,900) × 0.12 + $1,240 = $900 + $1,240 = $2,140.00
+    #   Per period: $2,140.00 / 12 = $178.33
+    result = calculate_net_pay(
+        gross=Decimal("3000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="federal", filing_status="single")],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("178.33")
+
+
+def test_2026_mfj_3000_monthly():
+    # MFJ, $3,000/mo, no W-4P adjustments
+    #   Line 1c: $36,000
+    #   Line 1g (MFJ, Step 2 not checked): $12,900
+    #   Line 1i: $36,000 − $12,900 = $23,100
+    #   Bracket (MFJ): $23,100 in $19,300–$44,100 @ 10%, base $0
+    #   Annual tax: ($23,100 − $19,300) × 0.10 + $0 = $380.00
+    #   Per period: $380.00 / 12 = $31.67
+    result = calculate_net_pay(
+        gross=Decimal("3000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="federal", filing_status="married_filing_jointly")],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("31.67")
+
+
+def test_2026_mfj_2000_monthly_falls_in_zero_percent_band():
+    # MFJ, $2,000/mo — adjusted income falls inside the 0% bracket; withholding = $0
+    #   Line 1c: $2,000 × 12 = $24,000
+    #   Line 1g (MFJ): $12,900
+    #   Line 1i: $24,000 − $12,900 = $11,100
+    #   Bracket (MFJ): $11,100 in $0–$19,300 @ 0%, base $0
+    #   Annual tax: $0.00
+    #   Per period: $0.00
+    result = calculate_net_pay(
+        gross=Decimal("2000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="federal", filing_status="married_filing_jointly")],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("0.00")
+
+
+def test_2026_single_5000_monthly():
+    # Single, $5,000/mo
+    #   Line 1c: $5,000 × 12 = $60,000
+    #   Line 1g (single): $8,600
+    #   Line 1i: $60,000 − $8,600 = $51,400
+    #   Bracket (single): $51,400 in $19,900–$57,900 @ 12%, base $1,240
+    #   Annual tax: ($51,400 − $19,900) × 0.12 + $1,240 = $3,780 + $1,240 = $5,020.00
+    #   Per period: $5,020.00 / 12 = $418.33
+    result = calculate_net_pay(
+        gross=Decimal("5000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="federal", filing_status="single")],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("418.33")
+
+
+def test_2026_single_3000_step2_checked():
+    # Single, $3,000/mo, Step 2 checkbox checked (dedicated Step 2 table, line 1g = $0)
+    #   Line 1c: $36,000
+    #   Line 1g = $0 (Step 2 checked → use step2_brackets, no line 1g reduction)
+    #   Line 1i: $36,000 − $0 = $36,000
+    #   Step 2 bracket (single): $36,000 in $33,250–$60,900 @ 22%, base $2,900
+    #   Annual tax: ($36,000 − $33,250) × 0.22 + $2,900 = $605 + $2,900 = $3,505.00
+    #   Per period: $3,505.00 / 12 = $292.08
+    result = calculate_net_pay(
+        gross=Decimal("3000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(
+            jurisdiction="federal", filing_status="single",
+            step_2_multiple_jobs=True,
+        )],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("292.08")
+
+
+def test_2026_mfj_3000_step2_checked():
+    # MFJ, $3,000/mo, Step 2 checkbox checked
+    #   Line 1c: $36,000
+    #   Line 1g = $0 (Step 2 → use step2_brackets)
+    #   Line 1i: $36,000
+    #   Step 2 bracket (MFJ): $36,000 in $28,500–$66,500 @ 12%, base $1,240
+    #   Annual tax: ($36,000 − $28,500) × 0.12 + $1,240 = $900 + $1,240 = $2,140.00
+    #   Per period: $2,140.00 / 12 = $178.33
+    result = calculate_net_pay(
+        gross=Decimal("3000"),
+        deductions=[],
+        tax_elections=[NetPayTaxElectionInput(
+            jurisdiction="federal", filing_status="married_filing_jointly",
+            step_2_multiple_jobs=True,
+        )],
+        payment_date=PAYMENT_DATE_2026,
+        pay_frequency="monthly",
+        federal_tax_config=FEDERAL_CONFIG_2026,
+        illinois_tax_config=None,
+    )
+    assert result.tax_withholdings[0].amount == Decimal("178.33")

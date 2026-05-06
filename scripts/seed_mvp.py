@@ -121,6 +121,94 @@ async def seed():
                     superseded_date=None,
                     note="IRS Pub 15-T 2025 — annualized percentage method for pension payments",
                 ),
+                # ── Federal income tax withholding — IRS Pub 15-T 2026 percentage method ──
+                # Structural change from 2025: standard deduction (line 1g) is now smaller
+                # because a 0% band is baked into the bracket tables themselves.
+                # Step 2 checkbox uses dedicated bracket tables (not halved line 1g).
+                dict(
+                    config_key="federal_income_tax_withholding",
+                    config_value={
+                        "tax_year": 2026,
+                        # Line 1g amounts — subtracted from annualized payment before brackets
+                        # (only when Step 2 is NOT checked; $0 when Step 2 IS checked)
+                        "standard_withholding_deduction": {
+                            "single": 8600,
+                            "married_filing_separately": 8600,
+                            "head_of_household": 8600,
+                            "married_filing_jointly": 12900,
+                            "qualifying_surviving_spouse": 12900,
+                        },
+                        # Standard brackets (Step 2 NOT checked) — 0% band at bottom
+                        "brackets": {
+                            "single": [
+                                {"min": 0, "max": 7500, "rate": 0.00, "base_tax": 0},
+                                {"min": 7500, "max": 19900, "rate": 0.10, "base_tax": 0},
+                                {"min": 19900, "max": 57900, "rate": 0.12, "base_tax": 1240.00},
+                                {"min": 57900, "max": 113200, "rate": 0.22, "base_tax": 5800.00},
+                                {"min": 113200, "max": 209275, "rate": 0.24, "base_tax": 17966.00},
+                                {"min": 209275, "max": 263725, "rate": 0.32, "base_tax": 41024.00},
+                                {"min": 263725, "max": 648100, "rate": 0.35, "base_tax": 58448.00},
+                                {"min": 648100, "max": None, "rate": 0.37, "base_tax": 192979.25},
+                            ],
+                            "married_filing_jointly": [
+                                {"min": 0, "max": 19300, "rate": 0.00, "base_tax": 0},
+                                {"min": 19300, "max": 44100, "rate": 0.10, "base_tax": 0},
+                                {"min": 44100, "max": 120100, "rate": 0.12, "base_tax": 2480.00},
+                                {"min": 120100, "max": 230700, "rate": 0.22, "base_tax": 11600.00},
+                                {"min": 230700, "max": 422850, "rate": 0.24, "base_tax": 35932.00},
+                                {"min": 422850, "max": 531750, "rate": 0.32, "base_tax": 82048.00},
+                                {"min": 531750, "max": 788000, "rate": 0.35, "base_tax": 116896.00},
+                                {"min": 788000, "max": None, "rate": 0.37, "base_tax": 206583.50},
+                            ],
+                            "head_of_household": [
+                                {"min": 0, "max": 15550, "rate": 0.00, "base_tax": 0},
+                                {"min": 15550, "max": 33250, "rate": 0.10, "base_tax": 0},
+                                {"min": 33250, "max": 83000, "rate": 0.12, "base_tax": 1770.00},
+                                {"min": 83000, "max": 121250, "rate": 0.22, "base_tax": 7740.00},
+                                {"min": 121250, "max": 217300, "rate": 0.24, "base_tax": 16155.00},
+                                {"min": 217300, "max": 271750, "rate": 0.32, "base_tax": 39207.00},
+                                {"min": 271750, "max": 656150, "rate": 0.35, "base_tax": 56631.00},
+                                {"min": 656150, "max": None, "rate": 0.37, "base_tax": 191171.00},
+                            ],
+                        },
+                        # Step 2 checkbox bracket tables — line 1g = $0 when Step 2 is checked
+                        "step2_brackets": {
+                            "single": [
+                                {"min": 0, "max": 8050, "rate": 0.00, "base_tax": 0},
+                                {"min": 8050, "max": 14250, "rate": 0.10, "base_tax": 0},
+                                {"min": 14250, "max": 33250, "rate": 0.12, "base_tax": 620.00},
+                                {"min": 33250, "max": 60900, "rate": 0.22, "base_tax": 2900.00},
+                                {"min": 60900, "max": 108938, "rate": 0.24, "base_tax": 8983.00},
+                                {"min": 108938, "max": 136163, "rate": 0.32, "base_tax": 20512.00},
+                                {"min": 136163, "max": 328350, "rate": 0.35, "base_tax": 29224.00},
+                                {"min": 328350, "max": None, "rate": 0.37, "base_tax": 96489.63},
+                            ],
+                            "married_filing_jointly": [
+                                {"min": 0, "max": 16100, "rate": 0.00, "base_tax": 0},
+                                {"min": 16100, "max": 28500, "rate": 0.10, "base_tax": 0},
+                                {"min": 28500, "max": 66500, "rate": 0.12, "base_tax": 1240.00},
+                                {"min": 66500, "max": 121800, "rate": 0.22, "base_tax": 5800.00},
+                                {"min": 121800, "max": 217875, "rate": 0.24, "base_tax": 17966.00},
+                                {"min": 217875, "max": 272325, "rate": 0.32, "base_tax": 41024.00},
+                                {"min": 272325, "max": 400450, "rate": 0.35, "base_tax": 58448.00},
+                                {"min": 400450, "max": None, "rate": 0.37, "base_tax": 103291.75},
+                            ],
+                            "head_of_household": [
+                                {"min": 0, "max": 12075, "rate": 0.00, "base_tax": 0},
+                                {"min": 12075, "max": 20925, "rate": 0.10, "base_tax": 0},
+                                {"min": 20925, "max": 45800, "rate": 0.12, "base_tax": 885.00},
+                                {"min": 45800, "max": 64925, "rate": 0.22, "base_tax": 3870.00},
+                                {"min": 64925, "max": 112950, "rate": 0.24, "base_tax": 8077.50},
+                                {"min": 112950, "max": 140175, "rate": 0.32, "base_tax": 19603.50},
+                                {"min": 140175, "max": 332375, "rate": 0.35, "base_tax": 28315.50},
+                                {"min": 332375, "max": None, "rate": 0.37, "base_tax": 95585.50},
+                            ],
+                        },
+                    },
+                    effective_date=date(2026, 1, 1),
+                    superseded_date=None,
+                    note="IRS Pub 15-T 2026 — annualized percentage method; 0% band baked into brackets; dedicated Step 2 checkbox tables",
+                ),
                 # ── Illinois income tax — flat rate ───────────────────────────
                 dict(
                     config_key="illinois_income_tax",
