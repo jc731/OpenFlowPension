@@ -25,6 +25,7 @@ from app.models.contact import MemberContact  # noqa: F401 — registers mapper
 from app.models.plan_config import PlanConfiguration, PlanTier, PlanType, SystemConfiguration
 from app.models.salary import SalaryHistory
 from app.models.service_credit import ServiceCreditEntry
+from app.models.document import DocumentTemplate
 
 engine = create_async_engine(settings.database_url, echo=False)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -220,6 +221,21 @@ async def seed():
                     effective_date=date(2025, 1, 1),
                     superseded_date=None,
                     note="IL flat rate 4.95%",
+                ),
+                # ── Fund identity ─────────────────────────────────────────────
+                dict(
+                    config_key="fund_info",
+                    config_value={
+                        "name": "State Universities Retirement System",
+                        "short_name": "SURS",
+                        "address": "1901 Fox Drive, Champaign, IL 61820",
+                        "phone": "(800) 275-7877",
+                        "website": "surs.org",
+                        "email": "memberservices@surs.org",
+                    },
+                    effective_date=date(2000, 1, 1),
+                    superseded_date=None,
+                    note="Fund contact information for document letterhead",
                 ),
                 # ── Payroll validation thresholds ─────────────────────────────
                 dict(
@@ -434,6 +450,28 @@ async def seed():
                     accrual_rule_config_id=monthly_floor_config.id,
                     note="Earned service credit: monthly_floor rule (post-2024-09-01)",
                 ))
+
+        # ── Document templates ────────────────────────────────────────────────
+        doc_templates = [
+            dict(
+                slug="benefit_estimate_letter",
+                document_type="letter",
+                template_file="benefit_estimate_letter.html",
+                description="Benefit estimate letter — sent to members requesting a retirement estimate",
+                config_value={
+                    "context": ["member_info", "employment_summary", "service_credit_summary", "contribution_summary", "benefit_estimate"],
+                    "title": "Benefit Estimate Letter",
+                    "params_schema": {"retirement_date": "date", "sick_leave_days": "int", "benefit_option_type": "str"},
+                },
+            ),
+        ]
+        for dt in doc_templates:
+            await get_or_create(
+                session,
+                DocumentTemplate,
+                {"slug": dt["slug"]},
+                {k: v for k, v in dt.items() if k != "slug"},
+            )
 
         # ── Summary ───────────────────────────────────────────────────────────
         result = await session.execute(

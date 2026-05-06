@@ -1,0 +1,104 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">Benefit Estimate — {{ estimate_retirement_date }}</h2>
+
+<div class="doc-body">
+
+  <p>Dear {{ member_full_name }},</p>
+
+  <p>
+    Thank you for requesting a benefit estimate from {{ fund_name }}.
+    Based on your posted salary history, service credit, and contributions on file,
+    the following estimate has been prepared for a retirement date of
+    <strong>{{ estimate_retirement_date }}</strong>.
+  </p>
+
+  {% if benefit_estimate_error %}
+  <div class="notice">
+    <strong>Note:</strong> {{ benefit_estimate_error }}
+  </div>
+  {% else %}
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Benefit Summary</th>
+    </tr>
+    <tr>
+      <td>Retirement Date</td>
+      <td class="amount">{{ estimate_retirement_date }}</td>
+    </tr>
+    <tr>
+      <td>Total Service Credit</td>
+      <td class="amount">{{ estimate_service_years }} years</td>
+    </tr>
+    <tr>
+      <td>Final Average Earnings</td>
+      <td class="amount">{{ estimate_fae }}</td>
+    </tr>
+    <tr>
+      <td>Formula Used</td>
+      <td class="amount">{{ estimate_formula_used }}</td>
+    </tr>
+    <tr>
+      <td>Benefit Option</td>
+      <td class="amount">{{ estimate_benefit_option }}</td>
+    </tr>
+    <tr>
+      <td><strong>Estimated Monthly Benefit</strong></td>
+      <td class="amount"><strong>{{ estimate_monthly_benefit }}</strong></td>
+    </tr>
+    <tr>
+      <td>Estimated Annual Benefit</td>
+      <td class="amount">{{ estimate_annual_benefit }}</td>
+    </tr>
+  </table>
+
+  {% if total_employee_contributions %}
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Contribution Summary</th>
+    </tr>
+    <tr>
+      <td>Total Employee Contributions</td>
+      <td class="amount">{{ total_employee_contributions }}</td>
+    </tr>
+    <tr>
+      <td>Total Employer Contributions</td>
+      <td class="amount">{{ total_employer_contributions }}</td>
+    </tr>
+    <tr>
+      <td><strong>Total Contributions</strong></td>
+      <td class="amount"><strong>{{ total_contributions }}</strong></td>
+    </tr>
+  </table>
+  {% endif %}
+
+  {% endif %}
+
+  <div class="notice">
+    <strong>Important:</strong> This is an estimate only and does not guarantee a benefit amount.
+    Final benefit calculations are performed at the time of retirement and are subject to
+    verification of all posted records. Contact {{ fund_name }} if you have questions about
+    your posted salary history or service credit.
+  </div>
+
+  <p>
+    If you have questions about this estimate or would like to schedule a pre-retirement
+    counseling appointment, please contact us at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}.
+  </p>
+
+</div>
+
+<div class="signature-block">
+  <p>Sincerely,</p>
+  <div class="signature-line">
+    {{ fund_name }}<br>
+    Member Services
+  </div>
+</div>
+
+{% endblock %}

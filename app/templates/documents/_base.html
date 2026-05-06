@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: letter;
+    margin: 1in 1in 1.2in 1in;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #888;
+    }
+    @bottom-left {
+      content: "{{ fund_name }}";
+      font-size: 8pt;
+      color: #888;
+    }
+  }
+
+  body {
+    font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    color: #1a1a1a;
+    line-height: 1.5;
+  }
+
+  .letterhead {
+    border-bottom: 2px solid #1a3a5c;
+    padding-bottom: 10pt;
+    margin-bottom: 20pt;
+  }
+
+  .fund-name {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1a3a5c;
+    letter-spacing: 0.02em;
+  }
+
+  .fund-contact {
+    font-size: 8.5pt;
+    color: #555;
+    margin-top: 3pt;
+  }
+
+  .doc-date {
+    text-align: right;
+    font-size: 10pt;
+    margin-bottom: 18pt;
+  }
+
+  .recipient-block {
+    margin-bottom: 18pt;
+    line-height: 1.4;
+  }
+
+  h2.doc-subject {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 0 0 14pt 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4pt;
+  }
+
+  .doc-body p {
+    margin: 0 0 10pt 0;
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12pt 0;
+    font-size: 10pt;
+  }
+
+  table.data-table th {
+    background: #1a3a5c;
+    color: white;
+    text-align: left;
+    padding: 5pt 8pt;
+    font-weight: bold;
+  }
+
+  table.data-table td {
+    padding: 5pt 8pt;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  table.data-table tr:nth-child(even) td {
+    background: #f7f9fc;
+  }
+
+  .amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .signature-block {
+    margin-top: 30pt;
+  }
+
+  .signature-line {
+    border-top: 1px solid #333;
+    width: 200pt;
+    margin-top: 36pt;
+    padding-top: 4pt;
+    font-size: 9pt;
+  }
+
+  .notice {
+    background: #f0f4f8;
+    border-left: 3pt solid #1a3a5c;
+    padding: 8pt 10pt;
+    margin: 12pt 0;
+    font-size: 9.5pt;
+  }
+
+  .confidential {
+    font-size: 8pt;
+    color: #888;
+    margin-top: 24pt;
+    border-top: 1px solid #ddd;
+    padding-top: 8pt;
+  }
+</style>
+</head>
+<body>
+
+<div class="letterhead">
+  <div class="fund-name">{{ fund_name }}</div>
+  {% if fund_address or fund_phone %}
+  <div class="fund-contact">
+    {% if fund_address %}{{ fund_address }}{% endif %}
+    {% if fund_phone %} &nbsp;|&nbsp; {{ fund_phone }}{% endif %}
+    {% if fund_website %} &nbsp;|&nbsp; {{ fund_website }}{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="doc-date">{{ document_date }}</div>
+
+{% if member_full_name %}
+<div class="recipient-block">
+  {{ member_full_name }}<br>
+  {% if address_line1 %}{{ address_line1 }}<br>{% endif %}
+  {% if address_line2 %}{{ address_line2 }}<br>{% endif %}
+  {% if address_city %}{{ address_city }}, {{ address_state }} {{ address_zip }}{% endif %}
+</div>
+{% endif %}
+
+{% block content %}{% endblock %}
+
+<div class="confidential">
+  This document contains confidential pension benefit information intended solely for the named recipient.
+  Member #{{ member_number }}
+</div>
+
+</body>
+</html>

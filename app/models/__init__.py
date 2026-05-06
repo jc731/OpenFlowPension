@@ -17,6 +17,7 @@ from app.models.leave_period import LeavePeriod
 from app.models.benefit_election import MemberBenefitElection
 from app.models.retirement_case import RetirementCase
 from app.models.api_key import ApiKey
+from app.models.document import DocumentTemplate, GeneratedDocument, FormSubmission
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -39,4 +40,5 @@ __all__ = [
     "RetirementCase",
     "ApiKey",
     "ThirdPartyEntity",
+    "DocumentTemplate", "GeneratedDocument", "FormSubmission",
 ]

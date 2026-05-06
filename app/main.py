@@ -15,6 +15,7 @@ from app.api.v1.routers.retirement import router as retirement_router
 from app.api.v1.routers.api_keys import router as api_keys_router
 from app.api.v1.routers.third_party_entities import router as third_party_entities_router
 from app.api.v1.routers.net_pay import router as net_pay_router
+from app.api.v1.routers.documents import router as documents_router
 
 app = FastAPI(
     title="OpenFlow Pension API",
@@ -36,6 +37,7 @@ app.include_router(retirement_router, prefix="/api/v1")
 app.include_router(api_keys_router, prefix="/api/v1")
 app.include_router(third_party_entities_router, prefix="/api/v1")
 app.include_router(net_pay_router, prefix="/api/v1")
+app.include_router(documents_router, prefix="/api/v1")
 
 
 @app.get("/health")
