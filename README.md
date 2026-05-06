@@ -51,7 +51,7 @@ We plan to have the best people. That's the whole pitch.
 | Admin / LOB frontend | React + Vite + TypeScript + Tailwind v4 + shadcn/ui |
 | Member portal frontend | Not yet started |
 | Background jobs | Celery + Redis |
-| Document generation | WeasyPrint (deferred) |
+| Document generation | WeasyPrint (built) — HTML templates → PDF; declarative context spec |
 | Auth | Keycloak JWT (built) + API keys (built) |
 | Actuarial / numerical | Pure Python (NumPy / pandas deferred) |
 
@@ -187,7 +187,7 @@ Example row:
 J-00001,2025-01-01,2025-01-31,7500.00,675.00,1125.00,21
 ```
 
-After upload the report detail page shows each row's status — `applied`, `skipped` (duplicate), or `error` (member not found, no active employment, missing accrual config). Applied rows write a `ServiceCreditEntry` and a `ContributionRecord` to the ledger.
+After upload the report detail page shows each row's status — `applied`, `flagged` (applied but has fund-validation warnings), `skipped` (duplicate), or `error` (member not found, no active employment, structural or fund-threshold violation). Applied and flagged rows write a `ServiceCreditEntry` and a `ContributionRecord` to the ledger.
 
 **API Keys**
 
@@ -205,6 +205,9 @@ All fund-specific rules live in the `system_configurations` table as JSONB, look
 | `employment_types` | Whitelist of valid employment type strings |
 | `leave_types` | Whitelist of valid leave type strings |
 | `fund_calculation_config` | All benefit calculation parameters (tier cutoffs, FAE windows, formula bands, cap tables, COLA rules) |
+| `federal_income_tax_withholding` | IRS Pub 15-T percentage method tables (seeded for 2025 and 2026) |
+| `illinois_income_tax` | State flat income tax rate |
+| `fund_info` | Fund name, address, phone, website — used for document letterheads |
 
 To inspect current config values:
 ```

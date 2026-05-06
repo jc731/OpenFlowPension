@@ -252,7 +252,7 @@ Architecture: `src/lib/api.ts` (typed Axios client — all API types + functions
 
 **Implemented pages:** Dashboard · Members (list + detail with employment/salary/cases/estimate) · Employers · Retirement Cases (approve/activate/cancel) · Payroll Reports (CSV upload, row-level status) · System Config (read-only placeholder) · API Keys (create/revoke/rotate with plaintext reveal).
 
-Forms/letters deferred — will be one module, not piecemeal. Member portal: separate frontend, not started.
+Document generation backend is built (see Document generation framework section). No admin UI page for it yet — documents are generated via API. Member portal: separate frontend, not started.
 
 ---
 
