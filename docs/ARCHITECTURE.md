@@ -79,9 +79,13 @@ Row fails → `status=error`, skip all business logic.
 `payroll_validation_config` structure: `{"max_gross_earnings", "max_days_per_period", "employee_contribution_rate", "employer_contribution_rate", "contribution_rate_tolerance", "mode"}`.
 
 **Tables:**
-- `payroll_reports` — header; `warning_count` tracks fund-validation-flagged rows
+- `payroll_reports` — header; `warning_count` tracks rows with any warnings (fund or rate variance)
 - `payroll_report_rows` — `validation_warnings` JSONB; status includes `flagged`
 - `contribution_records` — append-only C&I ledger; void pattern for corrections
+
+### Rate variance warnings (Level 3 — billing integration)
+
+During payroll ingestion, `ingest_json` pre-fetches a rate cache via `billing_service.build_rate_cache(employer_id, period_end)` once per report. For each row, after employment is resolved, `check_contribution_variance` compares submitted contributions against authoritative rates. Shortfalls are appended to `row.validation_warnings`; the row is flagged but not blocked. Overpayments are not flagged. Requires at least one `employer_contribution_rates` row to be seeded; gracefully skips if none configured.
 
 ---
 
@@ -485,3 +489,68 @@ Two config levels:
 - **Fund staff**: employer records, plan assignments, employment type whitelists. Already manageable via CRUD endpoints.
 
 Planned System Config UI (`/config`): edit `system_configurations` rows for system admins. New value = new row (never UPDATE — same immutability pattern). Require future `effective_date`. Gate behind `admin` scope.
+
+---
+
+## Employer billing
+
+Service: `app/services/billing_service.py`  
+Router: `app/api/v1/routers/billing.py`  
+Models: `app/models/billing.py` — `EmployerContributionRate`, `EmployerInvoice`, `EmployerInvoicePayment`  
+Schemas: `app/schemas/billing.py`
+
+### Contribution rates
+
+`employer_contribution_rates` holds authoritative rates with a specificity hierarchy (most specific wins):
+
+| employer_id | employment_type | Applies to |
+|---|---|---|
+| set | set | That employer + that employment type (narrowest) |
+| set | null | That employer, all employment types |
+| null | set | All employers, that employment type (police/fire) |
+| null | null | Fund-wide default (catch-all) |
+
+`get_effective_rate(employer_id, employment_type, as_of, session)` returns `(employee_rate, employer_rate)` as Decimals, or `None` if nothing configured.
+
+`build_rate_cache(employer_id, as_of, session)` pre-fetches all applicable rates for one employer into `dict[str, tuple[Decimal, Decimal]]`. Key `"*"` is the fund-wide catch-all. Used by payroll ingestion to avoid per-row DB queries.
+
+`lookup_rate_from_cache(cache, employment_type)` falls back from type-specific → `"*"`.
+
+### Variance check
+
+`check_contribution_variance(gross, submitted_employee, submitted_employer, employee_rate, employer_rate)` — pure function. Returns a list of human-readable warning strings for any shortfalls. Empty = no issues. Called per row during payroll ingestion (see payroll section above).
+
+### Invoice lifecycle
+
+```
+draft → issued → paid
+         ↓       (cannot void paid — create supplemental credit instead)
+       voided
+```
+
+`invoice_type`: `deficiency` (sourced from payroll reports) or `supplemental` (manual staff entry).
+
+`amount_paid` is denormalized — updated by `record_payment`. Auto-transitions to `paid` when `amount_paid >= amount_due`.
+
+`EmployerInvoicePayment` is append-only (void pattern — same as all other ledgers). `voided_at/by/reason` support payment corrections without deleting records.
+
+`line_items` JSONB stores the breakdown (employee deficiency, employer deficiency, interest, etc.). `source_report_ids` JSONB links back to the payroll reports that generated a deficiency invoice — for future accounting module linkage.
+
+### Deficiency calculation
+
+`calculate_deficiency(payroll_report_ids, employer_id, session)` — stateless, no DB write. Compares submitted contributions against authoritative rates for the given reports. Returns a breakdown dict. Called internally by `create_deficiency_invoice`.
+
+Only rows with `status in ("applied", "flagged")` are included. Rows with no employment type or no configured rate are skipped.
+
+### Endpoints
+
+- `POST /billing/rates` — seed a rate row (`admin`)
+- `GET /billing/rates` — list rates; `?employer_id=` to filter (`admin` or `member:read`)
+- `POST /employers/{id}/billing/deficiency-calc` — preview deficiency without creating invoice (`admin`)
+- `POST /employers/{id}/billing/invoices/deficiency` — create deficiency invoice from report IDs (`admin`)
+- `POST /employers/{id}/billing/invoices/supplemental` — create manual supplemental invoice (`admin`)
+- `GET /employers/{id}/billing/invoices` — list invoices; `?status=` filter (`admin` or `member:read`)
+- `GET /billing/invoices/{id}` — get invoice with payments (`admin` or `member:read`)
+- `POST /billing/invoices/{id}/issue` — draft→issued (`admin`)
+- `POST /billing/invoices/{id}/void` — void with reason (`admin`)
+- `POST /billing/invoices/{id}/payments` — record payment; auto-pays invoice when full (`admin`)

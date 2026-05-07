@@ -28,6 +28,7 @@ from app.models.member import Member
 from app.models.payroll import ContributionRecord, PayrollReport, PayrollReportRow
 from app.models.service_credit import ServiceCreditEntry
 from app.schemas.payroll import PayrollReportCreate, PayrollRowInput
+from app.services.billing_service import build_rate_cache, check_contribution_variance, lookup_rate_from_cache
 from app.services.config_service import ConfigNotFoundError, get_config
 from app.services.payroll_validation_service import validate_fund, validate_system
 
@@ -108,7 +109,12 @@ def compute_service_credit_years(
 
 # ── Row processor ──────────────────────────────────────────────────────────────
 
-async def _process_row(row: PayrollReportRow, employer_id: uuid.UUID, session: AsyncSession) -> None:
+async def _process_row(
+    row: PayrollReportRow,
+    employer_id: uuid.UUID,
+    session: AsyncSession,
+    rate_cache: dict | None = None,
+) -> None:
     # 1. Member lookup
     member_result = await session.execute(
         select(Member).where(Member.member_number == row.member_number)
@@ -142,6 +148,20 @@ async def _process_row(row: PayrollReportRow, employer_id: uuid.UUID, session: A
         return
 
     row.employment_id = employment.id
+
+    # 2b. Rate variance warnings (non-blocking)
+    if rate_cache is not None:
+        rates = lookup_rate_from_cache(rate_cache, employment.employment_type or "")
+        if rates:
+            rate_warnings = check_contribution_variance(
+                Decimal(str(row.gross_earnings)),
+                Decimal(str(row.employee_contribution)),
+                Decimal(str(row.employer_contribution)),
+                rates[0], rates[1],
+            )
+            if rate_warnings:
+                existing = list(row.validation_warnings or [])
+                row.validation_warnings = existing + rate_warnings
 
     # 3. Duplicate check
     dup = await session.execute(
@@ -231,12 +251,14 @@ async def ingest_json(
 
     # Load fund validation config once per report (None if not seeded)
     fund_validation_config: dict | None = None
+    rate_cache: dict | None = None
     if data.rows:
         try:
             cfg = await get_config("payroll_validation_config", data.rows[0].period_end, session)
             fund_validation_config = cfg.config_value
         except ConfigNotFoundError:
             pass
+        rate_cache = await build_rate_cache(employer_id, data.rows[0].period_end, session)
 
     row_statuses: list[str] = []
     warned_count = 0
@@ -267,7 +289,6 @@ async def ingest_json(
         fund_warnings = validate_fund(row_input, fund_validation_config or {})
         if fund_warnings:
             row.validation_warnings = fund_warnings
-            warned_count += 1
             reject_mode = (fund_validation_config or {}).get("mode", "warn") == "reject"
             if reject_mode:
                 row.status = "error"
@@ -275,11 +296,14 @@ async def ingest_json(
                 row_statuses.append(row.status)
                 continue
 
-        await _process_row(row, employer_id, session)
+        await _process_row(row, employer_id, session, rate_cache=rate_cache)
 
-        # Promote applied → flagged when fund warnings exist
-        if row.status == "applied" and fund_warnings:
-            row.status = "flagged"
+        # Promote applied → flagged when any warnings exist (fund or rate variance)
+        all_warnings = row.validation_warnings or []
+        if all_warnings:
+            warned_count += 1
+            if row.status == "applied":
+                row.status = "flagged"
 
         row_statuses.append(row.status)
 

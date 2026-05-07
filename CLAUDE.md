@@ -4,7 +4,7 @@
 
 OpenFlow Pension — open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Not production-ready.
 
-**Built:** benefit calc engine, payroll ingestion (with two-level validation), payment disbursement, contract/status management, beneficiary management, plan choice, benefit estimate, death/survivor module, retirement case, API key + Keycloak JWT auth, admin/LOB frontend, net pay engine, third-party entities, W-4P tax-withholding endpoint, document generation framework, service purchase module (claims + payments + credit grant).  
+**Built:** benefit calc engine, payroll ingestion (with three-level validation incl. rate variance), payment disbursement, contract/status management, beneficiary management, plan choice, benefit estimate, death/survivor module, retirement case, API key + Keycloak JWT auth, admin/LOB frontend, net pay engine, third-party entities, W-4P tax-withholding endpoint, document generation framework, service purchase module (claims + payments + credit grant), employer billing (contribution rates + deficiency/supplemental invoices + payments).  
 **Not started:** member portal frontend, form ingest (FormSubmission table stubbed), WeasyPrint HTML templates beyond `benefit_estimate_letter`.
 
 ---
@@ -108,6 +108,7 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | Admin frontend | `frontend/admin/` | `pnpm dev` → :5173; proxies `/api/*` to :8000 |
 | Document generation | `app/services/document_*.py` | Declarative context spec; WeasyPrint PDF; Option A escape hatch via `EXPLICIT_ASSEMBLERS` |
 | Service purchase | `app/services/service_purchase_service.py` | Claims lifecycle; 4 types (military/ope/prior_service/refund); installment payments; config-driven credit routing |
+| Employer billing | `app/services/billing_service.py` | Contribution rates (specificity hierarchy); deficiency + supplemental invoices; rate variance warnings in payroll |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
 **Backlog items:** `docs/BACKLOG.md`

@@ -19,6 +19,7 @@ from app.models.retirement_case import RetirementCase
 from app.models.api_key import ApiKey
 from app.models.document import DocumentTemplate, GeneratedDocument, FormSubmission
 from app.models.service_purchase import ServicePurchaseClaim, ServicePurchasePayment
+from app.models.billing import EmployerContributionRate, EmployerInvoice, EmployerInvoicePayment
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -43,4 +44,5 @@ __all__ = [
     "ThirdPartyEntity",
     "DocumentTemplate", "GeneratedDocument", "FormSubmission",
     "ServicePurchaseClaim", "ServicePurchasePayment",
+    "EmployerContributionRate", "EmployerInvoice", "EmployerInvoicePayment",
 ]
