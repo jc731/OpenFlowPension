@@ -252,6 +252,56 @@ async def seed():
                     superseded_date=None,
                     note="Fund-level payroll validation thresholds; mode=warn flags rows without rejecting",
                 ),
+                # ── Service purchase types ─────────────────────────────────────
+                dict(
+                    config_key="service_purchase_types",
+                    config_value={
+                        "types": {
+                            "military": {
+                                "label": "Military Service",
+                                "credit_entry_type": "purchased_military",
+                                "credit_type_slot": "military_service_years",
+                                "calc_method": "rate_based",
+                                "employee_rate": 0.08,
+                                "employer_rate": 0.0,
+                                "installment_allowed": True,
+                                "credit_grant_on": "completion",
+                            },
+                            "ope": {
+                                "label": "Other Public Employment",
+                                "credit_entry_type": "purchased_ope",
+                                "credit_type_slot": "ope_service_years",
+                                "calc_method": "rate_based",
+                                "employee_rate": 0.08,
+                                "employer_rate": 0.12,
+                                "installment_allowed": True,
+                                "credit_grant_on": "completion",
+                            },
+                            "prior_service": {
+                                "label": "Prior Service",
+                                "credit_entry_type": "purchased_prior_service",
+                                "credit_type_slot": "system_service_years",
+                                "calc_method": "rate_based",
+                                "employee_rate": 0.08,
+                                "employer_rate": 0.12,
+                                "installment_allowed": True,
+                                "credit_grant_on": "completion",
+                            },
+                            "refund": {
+                                "label": "Refund Repayment",
+                                "credit_entry_type": "purchased_refund",
+                                "credit_type_slot": "system_service_years",
+                                "calc_method": "refund_repayment",
+                                "interest_rate": 0.065,
+                                "installment_allowed": False,
+                                "credit_grant_on": "completion",
+                            },
+                        }
+                    },
+                    effective_date=date(1980, 1, 1),
+                    superseded_date=None,
+                    note="Service purchase type definitions: calc method, rates, installment eligibility, credit routing",
+                ),
             ]
 
             config_rows = {}

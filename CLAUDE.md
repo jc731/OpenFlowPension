@@ -4,7 +4,7 @@
 
 OpenFlow Pension — open-source pension administration platform for public funds (Apache 2.0 + Commons Clause). Not production-ready.
 
-**Built:** benefit calc engine, payroll ingestion (with two-level validation), payment disbursement, contract/status management, beneficiary management, plan choice, benefit estimate, death/survivor module, retirement case, API key + Keycloak JWT auth, admin/LOB frontend, net pay engine, third-party entities, W-4P tax-withholding endpoint, document generation framework.  
+**Built:** benefit calc engine, payroll ingestion (with two-level validation), payment disbursement, contract/status management, beneficiary management, plan choice, benefit estimate, death/survivor module, retirement case, API key + Keycloak JWT auth, admin/LOB frontend, net pay engine, third-party entities, W-4P tax-withholding endpoint, document generation framework, service purchase module (claims + payments + credit grant).  
 **Not started:** member portal frontend, form ingest (FormSubmission table stubbed), WeasyPrint HTML templates beyond `benefit_estimate_letter`.
 
 ---
@@ -107,6 +107,7 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | Config service | `app/services/config_service.py` | All fund rules route through `get_config()` |
 | Admin frontend | `frontend/admin/` | `pnpm dev` → :5173; proxies `/api/*` to :8000 |
 | Document generation | `app/services/document_*.py` | Declarative context spec; WeasyPrint PDF; Option A escape hatch via `EXPLICIT_ASSEMBLERS` |
+| Service purchase | `app/services/service_purchase_service.py` | Claims lifecycle; 4 types (military/ope/prior_service/refund); installment payments; config-driven credit routing |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
 **Backlog items:** `docs/BACKLOG.md`
@@ -117,8 +118,8 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 
 All fund rules stored in `system_configurations` table, looked up via `get_config(key, as_of, session)`.
 
-**Seeded:** `service_credit_accrual_rule` · `employment_types` · `leave_types` · `fund_calculation_config` · `federal_income_tax_withholding` (2025 + 2026 formats differ — see `docs/ARCHITECTURE.md`) · `illinois_income_tax` · `fund_info`  
-**Required at go-live:** `payroll_validation_config` · `concurrent_employment_max_annual_credit`
+**Seeded:** `service_credit_accrual_rule` · `employment_types` · `leave_types` · `fund_calculation_config` · `federal_income_tax_withholding` (2025 + 2026 formats differ — see `docs/ARCHITECTURE.md`) · `illinois_income_tax` · `fund_info` · `service_purchase_types` · `payroll_validation_config`  
+**Required at go-live:** `concurrent_employment_max_annual_credit`
 
 Full key schemas and adding-a-key checklist: `docs/ARCHITECTURE.md#system-configuration-keys`
 

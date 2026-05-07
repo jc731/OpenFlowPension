@@ -36,15 +36,16 @@ High complexity; rules vary significantly by fund. Do not implement speculativel
 
 ---
 
-## Service purchase module
+## Service purchase — refund_repayment calc method
 
-Members purchase service credit for prior periods (military, refunded service, etc.).
+The `refund_repayment` calc method is stubbed and raises `ValueError`. Refund repayment cost = original refund amount + compound interest from refund date to repayment date at a fund-specific rate.
 
-**Flow:**
-1. `POST /members/{id}/service-purchase/quote` — stateless cost estimate from `service_purchase_rates_{type}` config
-2. `POST /members/{id}/service-purchase/apply` — write path; validates payment received; posts `ServiceCreditEntry` + `ContributionRecord`
+**What's needed:**
+- Source the original refund amount — either from a `ContributionRecord(contribution_type="refund")` record (if the refund was processed in-system) or from manual staff entry on the claim (`params.original_refund_amount`)
+- Compound interest formula: `cost = original × (1 + rate)^years` where `rate` comes from `interest_rate` in the type config
+- Partial-year handling (day-count convention)
 
-Rate tables: store in `system_configurations` keyed `service_purchase_rates_{type}` with effective date.
+Implement in `_calc_refund_repayment()` in `service_purchase_service.py`. No schema changes needed — `cost_breakdown` JSONB captures the full calculation.
 
 ---
 
@@ -86,6 +87,14 @@ Validate ABA routing numbers against the Federal Reserve EPRD (downloadable CSV 
 - PEP calculation (Spec §13)
 - HAE earnings limitation (Spec §11)
 - Income tax exclusion (Spec §10)
+
+---
+
+## Leave purchase / buy-back
+
+The service purchase infrastructure (claims, payment ledger, entry_type routing) is designed to support purchased leave credit (e.g., buying back unpaid leave, sabbatical, parental leave taken before system coverage). Deferred — implement when a fund requests it.
+
+**What's already in place:** `service_purchase_claims` tracking, `service_purchase_payments` ledger, `credit_type_slot` routing in `service_purchase_types` config, and the `ServiceCreditEntry.entry_type` free-string convention all support a `leave_buyback` type without schema changes. The main addition would be a `leave_buyback` calc method and the appropriate `credit_type_slot` mapping.
 
 ---
 

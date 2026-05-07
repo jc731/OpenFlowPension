@@ -331,6 +331,70 @@ Jane Smith — born 1965-03-15, hired 2000-01-15 at State University of Illinois
 
 ---
 
+## Service purchase module
+
+Service: `app/services/service_purchase_service.py`  
+Router: `app/api/v1/routers/service_purchase.py`  
+Models: `app/models/service_purchase.py` — `ServicePurchaseClaim`, `ServicePurchasePayment`
+
+### Design
+
+All purchase-type rules are config-driven via `service_purchase_types` in `system_configurations`. Adding a new type requires only a new config entry — no code changes unless the new type needs a new `calc_method`.
+
+**Four seeded types:**
+
+| Type | Label | Calc method | Installment | `credit_type_slot` |
+|---|---|---|---|---|
+| `military` | Military Service | `rate_based` | Yes | `military_service_years` |
+| `ope` | Other Public Employment | `rate_based` | Yes | `ope_service_years` |
+| `prior_service` | Prior Service | `rate_based` | Yes | `system_service_years` |
+| `refund` | Refund Repayment | `refund_repayment` *(stub)* | No | `system_service_years` |
+
+### Claim lifecycle
+
+```
+draft → pending_approval → approved → in_payment → completed
+(any non-terminal state) → cancelled
+```
+
+- **draft**: created with cost snapshot; member/staff reviewing
+- **pending_approval**: submitted for staff sign-off
+- **approved**: staff-approved; payment accepted; if `credit_grant_on="approval"` → credit written immediately, status→completed
+- **in_payment**: first payment recorded; if `credit_grant_on="first_payment"` → credit written on first payment
+- **completed**: fully paid; `credit_grant_on="completion"` → credit written here (default)
+
+Cost snapshot (`cost_total`, `cost_breakdown`) is frozen at claim creation. No recalculation on payment.
+
+### Credit routing
+
+The `credit_type_slot` field on each type config drives how the resulting `ServiceCreditEntry.entry_type` maps to `BenefitCalculationRequest` fields in the estimate engine. This keeps `benefit_estimate_service._service_credit_by_slot()` config-driven: unknown entry types default to `system_service_years`.
+
+**Entry types written by purchase:** `purchased_military` · `purchased_ope` · `purchased_prior_service` · `purchased_refund`
+
+### Calc methods
+
+- **`rate_based`**: `cost = credit_years × current_annual_salary × (employee_rate + employer_rate)`. Salary resolved from the most recent `SalaryHistory` row as of `period_end`.
+- **`refund_repayment`**: NOT YET IMPLEMENTED — raises `ValueError` with guidance. Requires original refund amount + fund-specific compounding rules; tracked in `docs/BACKLOG.md`.
+
+Adding a new calc method: add a function matching `(credit_years, type_cfg) -> (cost, breakdown)` and register it in `_CALC_METHODS`.
+
+### Payment ledger
+
+`service_purchase_payments` is append-only (same void pattern as other ledgers). `cost_paid` is denormalized on the claim for fast queries. Non-installment types enforce single-payment by raising on any second payment attempt when `cost_paid > 0`.
+
+### Endpoints
+
+- `POST /members/{id}/service-purchase/quote` — stateless cost estimate (`member:read`)
+- `POST /members/{id}/service-purchase/claims` — create claim (`member:write`)
+- `GET  /members/{id}/service-purchase/claims` — list claims (`member:read`)
+- `GET  /service-purchase/claims/{id}` — detail + payments (`member:read`)
+- `POST /service-purchase/claims/{id}/submit` — draft→pending_approval (`member:write`)
+- `POST /service-purchase/claims/{id}/approve` — pending_approval→approved (`member:write`)
+- `POST /service-purchase/claims/{id}/cancel` — any non-terminal→cancelled (`member:write`)
+- `POST /service-purchase/claims/{id}/payments` — record payment; auto-completes when paid in full (`member:write`)
+
+---
+
 ## Document generation framework
 
 Service files: `app/services/document_context_providers.py` · `app/services/document_assembler.py` · `app/services/document_renderer.py` · `app/services/document_service.py`  

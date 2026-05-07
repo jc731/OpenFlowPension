@@ -18,6 +18,7 @@ from app.models.benefit_election import MemberBenefitElection
 from app.models.retirement_case import RetirementCase
 from app.models.api_key import ApiKey
 from app.models.document import DocumentTemplate, GeneratedDocument, FormSubmission
+from app.models.service_purchase import ServicePurchaseClaim, ServicePurchasePayment
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -41,4 +42,5 @@ __all__ = [
     "ApiKey",
     "ThirdPartyEntity",
     "DocumentTemplate", "GeneratedDocument", "FormSubmission",
+    "ServicePurchaseClaim", "ServicePurchasePayment",
 ]

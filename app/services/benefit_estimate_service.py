@@ -29,6 +29,7 @@ from app.schemas.benefit import (
     SalaryPeriod,
 )
 from app.services.benefit.calculator import calculate_benefit
+from app.services.config_service import ConfigNotFoundError, get_config
 from app.services.fund_config_service import load_fund_config
 
 
@@ -60,7 +61,7 @@ async def get_estimate(
     if not salary_periods:
         raise ValueError("No salary history found for this member — cannot calculate benefit")
 
-    system_service_years = await _total_service_credit(member_id, session)
+    credit_by_slot = await _service_credit_by_slot(member_id, retirement_date, session)
     mp_contributions = await _mp_contributions(member_id, session)
     is_police_fire = await _is_police_fire(member_id, session)
 
@@ -71,7 +72,9 @@ async def get_estimate(
         birth_date=member.date_of_birth,
         retirement_date=retirement_date,
         termination_date=termination_date,
-        system_service_years=Decimal(str(system_service_years)),
+        system_service_years=credit_by_slot.get("system_service_years", Decimal("0")),
+        ope_service_years=credit_by_slot.get("ope_service_years", Decimal("0")),
+        military_service_years=credit_by_slot.get("military_service_years", Decimal("0")),
         sick_leave_days=sick_leave_days,
         salary_history=salary_periods,
         money_purchase_contributions=mp_contributions,
@@ -116,14 +119,40 @@ async def _salary_periods(member_id: uuid.UUID, session: AsyncSession) -> list[S
     ]
 
 
-async def _total_service_credit(member_id: uuid.UUID, session: AsyncSession) -> Decimal:
-    stmt = select(func.sum(ServiceCreditEntry.credit_years)).where(
-        ServiceCreditEntry.member_id == member_id,
-        ServiceCreditEntry.voided_at.is_(None),
+async def _service_credit_by_slot(
+    member_id: uuid.UUID, as_of: date, session: AsyncSession
+) -> dict[str, Decimal]:
+    """Sum service credit years grouped by entry_type, then map to BenefitCalculationRequest slots.
+
+    Slot mapping comes from service_purchase_types config (credit_type_slot per type).
+    Any entry_type not found in the mapping defaults to system_service_years.
+    """
+    # Build entry_type → calc slot mapping from config
+    slot_map: dict[str, str] = {}
+    try:
+        cfg = await get_config("service_purchase_types", as_of, session)
+        for type_cfg in cfg.config_value.get("types", {}).values():
+            entry_type = type_cfg.get("credit_entry_type")
+            slot = type_cfg.get("credit_type_slot", "system_service_years")
+            if entry_type:
+                slot_map[entry_type] = slot
+    except ConfigNotFoundError:
+        pass  # no purchase types configured — all credit is system credit
+
+    stmt = (
+        select(ServiceCreditEntry.entry_type, func.sum(ServiceCreditEntry.credit_years))
+        .where(
+            ServiceCreditEntry.member_id == member_id,
+            ServiceCreditEntry.voided_at.is_(None),
+        )
+        .group_by(ServiceCreditEntry.entry_type)
     )
     result = await session.execute(stmt)
-    total = result.scalar_one_or_none()
-    return Decimal(str(total)) if total is not None else Decimal("0")
+    totals: dict[str, Decimal] = {}
+    for entry_type, total in result.all():
+        slot = slot_map.get(entry_type, "system_service_years")
+        totals[slot] = totals.get(slot, Decimal("0")) + (Decimal(str(total)) if total else Decimal("0"))
+    return totals
 
 
 async def _mp_contributions(member_id: uuid.UUID, session: AsyncSession) -> MoneyPurchaseContributions:
