@@ -3,7 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, require_scope
+from app.api.deps import get_current_user, require_scope
+from app.database import get_session
 from app.schemas.net_pay import (
     NetPayRequest,
     NetPayResult,
@@ -19,7 +20,7 @@ router = APIRouter(tags=["net-pay"])
 @router.post("/calculate/tax-withholding", response_model=TaxWithholdingResult)
 async def calculate_tax_withholding(
     req: TaxWithholdingRequest,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Stateless W-4P / state tax withholding calculation.
@@ -44,7 +45,7 @@ async def calculate_tax_withholding(
 @router.post("/calculate/net-pay", response_model=NetPayResult)
 async def calculate_net_pay(
     req: NetPayRequest,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Stateless net pay calculation. Provide gross, deductions, and tax elections; get back
@@ -59,7 +60,7 @@ async def calculate_net_pay(
 @router.get("/payments/{payment_id}/net-pay", response_model=NetPayResult)
 async def get_payment_net_pay(
     payment_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Read-only. Resolves active deduction orders and W-4 elections for the payment's member
@@ -76,7 +77,7 @@ async def get_payment_net_pay(
 @router.post("/payments/{payment_id}/apply-net-pay", response_model=NetPayResult)
 async def apply_payment_net_pay(
     payment_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Write path. Resolves and persists PaymentDeduction rows and updates net_amount on the

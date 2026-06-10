@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, require_scope
+from app.api.deps import get_current_user, require_scope
+from app.database import get_session
 from app.schemas.document import (
     DocumentTemplateCreate,
     DocumentTemplateRead,
@@ -18,7 +19,7 @@ router = APIRouter(tags=["documents"])
 
 @router.get("/document-templates", response_model=list[DocumentTemplateRead])
 async def list_document_templates(
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     require_scope(principal, "admin")
@@ -28,7 +29,7 @@ async def list_document_templates(
 @router.post("/document-templates", response_model=DocumentTemplateRead, status_code=201)
 async def create_document_template(
     data: DocumentTemplateCreate,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Register a new document template. Template file must already exist in
@@ -45,7 +46,7 @@ async def create_document_template(
 @router.post("/documents/generate", response_model=GeneratedDocumentRead, status_code=201)
 async def generate_document(
     req: GenerateDocumentRequest,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Generate a document for a member and persist an audit record.
@@ -71,7 +72,7 @@ async def generate_document(
 @router.get("/members/{member_id}/documents", response_model=list[GeneratedDocumentRead])
 async def list_member_documents(
     member_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     require_scope(principal, "member:read")
@@ -81,7 +82,7 @@ async def list_member_documents(
 @router.get("/documents/{document_id}/download")
 async def download_document(
     document_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Stream the PDF bytes for a previously generated document."""

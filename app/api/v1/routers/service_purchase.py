@@ -3,7 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, require_scope
+from app.api.deps import get_current_user, require_scope
+from app.database import get_session
 from app.schemas.service_purchase import (
     ApprovePurchaseClaimRequest,
     CancelPurchaseClaimRequest,
@@ -29,7 +30,7 @@ def _claim_or_404(claim, claim_id: uuid.UUID):
 async def quote_service_purchase(
     member_id: uuid.UUID,
     req: ServicePurchaseQuoteRequest,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Stateless cost estimate. Does not create any records."""
@@ -44,7 +45,7 @@ async def quote_service_purchase(
 async def create_claim(
     member_id: uuid.UUID,
     data: ServicePurchaseClaimCreate,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Create a purchase claim (status=draft). Runs the cost calculation and persists the snapshot."""
@@ -62,7 +63,7 @@ async def create_claim(
 @router.get("/members/{member_id}/service-purchase/claims", response_model=list[ServicePurchaseClaimRead])
 async def list_claims(
     member_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     require_scope(principal, "member:read")
@@ -72,7 +73,7 @@ async def list_claims(
 @router.get("/service-purchase/claims/{claim_id}", response_model=ServicePurchaseClaimRead)
 async def get_claim(
     claim_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     require_scope(principal, "member:read")
@@ -83,7 +84,7 @@ async def get_claim(
 @router.post("/service-purchase/claims/{claim_id}/submit", response_model=ServicePurchaseClaimRead)
 async def submit_claim(
     claim_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Transition draft → pending_approval."""
@@ -101,7 +102,7 @@ async def submit_claim(
 async def approve_claim(
     claim_id: uuid.UUID,
     req: ApprovePurchaseClaimRequest = ApprovePurchaseClaimRequest(),
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Transition pending_approval → approved. Grants credit immediately if credit_grant_on='approval'."""
@@ -120,7 +121,7 @@ async def approve_claim(
 async def cancel_claim(
     claim_id: uuid.UUID,
     req: CancelPurchaseClaimRequest,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     require_scope(principal, "member:write")
@@ -141,7 +142,7 @@ async def cancel_claim(
 async def record_payment(
     claim_id: uuid.UUID,
     data: ServicePurchasePaymentCreate,
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_session),
     principal=Depends(get_current_user),
 ):
     """Record a payment. Auto-completes the claim and grants service credit when fully paid."""
