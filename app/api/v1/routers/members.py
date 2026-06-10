@@ -1,14 +1,16 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, require_scope
 from app.database import get_session
+from app.schemas.address import MemberAddressCreate, MemberAddressRead
 from app.schemas.benefit import BenefitCalculationResult, BenefitOptionRequest
-from app.schemas.member import MemberCreate, MemberRead
+from app.schemas.contact import MemberContactCreate, MemberContactRead
+from app.schemas.member import MemberCreate, MemberImportResult, MemberRead
 from app.services import benefit_estimate_service, member_service, plan_choice_service
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -21,8 +23,41 @@ class PlanChoiceCreate(BaseModel):
 
 
 @router.get("/", response_model=list[MemberRead], dependencies=[Depends(require_scope("member:read"))])
-async def list_members(session: AsyncSession = Depends(get_session)):
-    return await member_service.list_members(session)
+async def list_members(
+    status: str | None = None,
+    employer_id: uuid.UUID | None = None,
+    employment_type: str | None = None,
+    q: str | None = Query(None, description="Search name or member number"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_session),
+):
+    return await member_service.list_members(
+        session,
+        status=status,
+        employer_id=employer_id,
+        employment_type=employment_type,
+        q=q,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/import", response_model=MemberImportResult, status_code=201)
+async def import_members(
+    file: UploadFile,
+    session: AsyncSession = Depends(get_session),
+    _: Principal = Depends(require_scope("member:write")),
+):
+    content = await file.read()
+    try:
+        csv_text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=422, detail="File must be UTF-8 encoded CSV")
+    try:
+        return await member_service.bulk_import_members(csv_text, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.get("/{member_id}", response_model=MemberRead, dependencies=[Depends(require_scope("member:read"))])
@@ -40,6 +75,44 @@ async def create_member(
     _: Principal = Depends(require_scope("member:write")),
 ):
     return await member_service.create_member(data, session)
+
+
+@router.get("/{member_id}/addresses", response_model=list[MemberAddressRead],
+            dependencies=[Depends(require_scope("member:read"))])
+async def list_addresses(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    return await member_service.list_addresses(member_id, session)
+
+
+@router.post("/{member_id}/addresses", response_model=MemberAddressRead, status_code=201)
+async def add_address(
+    member_id: uuid.UUID,
+    data: MemberAddressCreate,
+    session: AsyncSession = Depends(get_session),
+    _: Principal = Depends(require_scope("member:write")),
+):
+    try:
+        return await member_service.add_address(member_id, data, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/{member_id}/contacts", response_model=list[MemberContactRead],
+            dependencies=[Depends(require_scope("member:read"))])
+async def list_contacts(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    return await member_service.list_contacts(member_id, session)
+
+
+@router.post("/{member_id}/contacts", response_model=MemberContactRead, status_code=201)
+async def add_contact(
+    member_id: uuid.UUID,
+    data: MemberContactCreate,
+    session: AsyncSession = Depends(get_session),
+    _: Principal = Depends(require_scope("member:write")),
+):
+    try:
+        return await member_service.add_contact(member_id, data, session)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.post("/{member_id}/plan-choice", response_model=MemberRead)

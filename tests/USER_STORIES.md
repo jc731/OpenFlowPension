@@ -31,13 +31,13 @@ _Tests: test_contract_service.py_
 As **Fund Staff**, I want to view a member's current status (active, on\_leave, terminated, annuitant, deceased, inactive), so that I know where they are in their lifecycle.  
 _Tests: test_contract_service.py_
 
-**US-M04** `[PARTIAL]`  
+**US-M04** `[BUILT]`  
 As **Fund Staff**, I want to view and update a member's mailing address, so that correspondence reaches them.  
-_Gap: MemberAddress model exists but no address CRUD endpoints or admin page; document context provider references address fields but they aren't populated via API._
+_Tests: test_member_service.py. New address end-dates the active address of the same type (one active per type — invariant the document context providers rely on). No admin page yet (US-UI*)._
 
-**US-M05** `[PARTIAL]`  
+**US-M05** `[BUILT]`  
 As **Fund Staff**, I want to record a member's contact information (phone, email), so that we can reach them.  
-_Gap: MemberContact model exists; no CRUD endpoints surfaced._
+_Tests: test_member_service.py. Multiple active contacts per type allowed; `supersede` flag end-dates same-type rows; new primary demotes the previous one._
 
 **US-M06** `[BUILT]`  
 As **Fund Staff**, I want to set a member's plan tier and plan type (plan choice), so that the correct benefit formula applies to them.  
@@ -51,13 +51,13 @@ _Tests: test_plan_choice_service.py_
 As **Fund Staff**, I want to record the member's certification date (hire date for benefit eligibility), so that tier determination and retirement eligibility is accurate.  
 _Tests: test_benefit_calculator.py, test_benefit_estimate_service.py_
 
-**US-M09** `[GAP]`  
+**US-M09** `[BUILT]`  
 As **Fund Staff**, I want to bulk-import a list of new members from a CSV or spreadsheet, so that I don't have to create them one at a time during onboarding.  
-_Gap: No bulk import endpoint or service function. Single-row API only._
+_Tests: test_member_service.py. POST /members/import (CSV upload); partial success with row-level errors, mirroring payroll intake._
 
-**US-M10** `[GAP]`  
+**US-M10** `[BUILT]`  
 As **Fund Staff**, I want to search and filter the member list by status, employer, employment type, or name, so that I can find members without scrolling through everything.  
-_Gap: `GET /members` returns all; no filter/search parameters._
+_Tests: test_member_service.py. GET /members params: status, employer_id, employment_type, q (name/member number), limit/offset. No UI surface yet._
 
 **US-M11** `[GAP]`  
 As **Fund Staff**, I want to see a complete activity timeline for a member (employment changes, salary adjustments, payroll posts, service purchase events, retirement case steps), so that I have a full audit trail in one place.  
@@ -700,10 +700,10 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 60 |
-| `[PARTIAL]` | 9 |
+| `[BUILT]` | 64 |
+| `[PARTIAL]` | 7 |
 | `[STUB]` | 2 |
-| `[GAP]` | 53 |
+| `[GAP]` | 51 |
 | **Total** | **124** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
@@ -711,8 +711,7 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 1. **Admin UI pages** — Billing, service purchase, beneficiaries, payments, documents, system config (US-UI08 through US-UI14)
 2. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing
 3. **Invoice overdue + interest accrual** (US-BL11, US-BL12) — model ready, no business logic
-4. **Member address/contact CRUD** (US-M04, US-M05) — models exist, no API surface
-5. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
-6. **Concurrent employment max credit enforcement** (US-E08) — config exists, not enforced
-7. **System config admin UI write path** (US-CF04) — read-only placeholder only
-8. **API key expiry enforcement** (US-AK05) — field exists, not checked
+4. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
+5. **Concurrent employment max credit enforcement** (US-E08) — config exists, not enforced
+6. **System config admin UI write path** (US-CF04) — read-only placeholder only
+7. **API key expiry enforcement** (US-AK05) — field exists, not checked

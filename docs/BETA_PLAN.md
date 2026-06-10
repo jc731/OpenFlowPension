@@ -2,7 +2,7 @@
 
 Road to a staff-facing pilot beta: fund office staff running realistic workflows through the admin UI against seeded or migrated data. A member-facing beta (member portal) is a separate later phase and does not block this one.
 
-Story IDs reference `tests/USER_STORIES.md` (91 BUILT / 7 PARTIAL / 5 STUB / 63 GAP as of 2026-06-10). The backend is essentially feature-complete for core administration; the gap between here and beta is admin UI coverage, member-record basics, operational reports, and CI.
+Story IDs reference `tests/USER_STORIES.md` (see its summary table for current counts). The backend is essentially feature-complete for core administration; the gap between here and beta is admin UI coverage, member-record basics, operational reports, and CI.
 
 ---
 
@@ -17,14 +17,14 @@ Story IDs reference `tests/USER_STORIES.md` (91 BUILT / 7 PARTIAL / 5 STUB / 63 
 
 ---
 
-## Phase 1 — Member record basics
+## Phase 1 — Member record basics (done 2026-06-10)
 
 Staff can't run a pilot if they can't find members or maintain their contact details, and a pilot fund's membership can't be keyed in one POST at a time.
 
-- [ ] **Address CRUD** (US-M04) — `MemberAddress` model exists; add endpoints + service; wire into document context providers (they reference address fields that are currently never populated via API)
-- [ ] **Contact CRUD** (US-M05) — `MemberContact` model exists; add endpoints + service
-- [ ] **Member search/filter** (US-M10) — `GET /members` query params: status, employer, employment type, name; paginate
-- [ ] **Bulk member import** (US-M09) — CSV import endpoint mirroring the payroll CSV intake pattern (partial-success, row-level errors)
+- [x] **Address CRUD** (US-M04) — GET/POST `/members/{id}/addresses`; new address end-dates the active one of the same type, which populates the address fields the document context providers read
+- [x] **Contact CRUD** (US-M05) — GET/POST `/members/{id}/contacts`; multiple active per type, `supersede` flag for replacement, primary demotion
+- [x] **Member search/filter** (US-M10) — `GET /members` query params: status, employer_id, employment_type, q (name/member number), limit/offset
+- [x] **Bulk member import** (US-M09) — `POST /members/import` CSV upload mirroring the payroll intake pattern (partial success, row-level errors)
 
 ## Phase 2 — Admin UI buildout
 

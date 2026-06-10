@@ -40,3 +40,16 @@ class MemberRead(MemberBase):
     # ssn_encrypted is intentionally absent — never expose ciphertext in API responses
     created_at: datetime
     updated_at: datetime
+
+
+class MemberImportRowError(BaseModel):
+    row: int  # 1-based CSV line number; the header is line 1
+    member_number: str | None = None
+    error: str
+
+
+class MemberImportResult(BaseModel):
+    total_rows: int
+    created_count: int
+    error_count: int
+    errors: list[MemberImportRowError]
