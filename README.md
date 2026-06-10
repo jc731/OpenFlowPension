@@ -2,6 +2,7 @@
 
 > Open source pension administration — built for public funds, by people who know how they actually work.
 
+![CI](https://github.com/jc731/OpenFlowPension/actions/workflows/ci.yml/badge.svg)
 ![License: Apache 2.0 + Commons Clause](https://img.shields.io/badge/license-Apache%202.0%20%2B%20Commons%20Clause-blue)
 ![Stack: Python + FastAPI](https://img.shields.io/badge/stack-Python%20%2B%20FastAPI-green)
 ![Database: PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-blue)
@@ -269,7 +270,9 @@ Contributions are welcome. Before opening a pull request on a significant featur
 
 ## Status
 
-Early development. Core data model, benefit calculation engine, payroll ingestion, payment disbursement, retirement case workflow, and admin/LOB frontend scaffolding are built. Keycloak JWT auth, member portal, and document generation are not yet started. Not production-ready.
+Working toward a staff-facing pilot beta. The backend is essentially feature-complete for core administration: benefit calculation, payroll ingestion with validation, payment disbursement, net pay / W-4P withholding, retirement cases, survivor benefits, service purchase, employer billing, document generation, and auth (Keycloak JWT + API keys). The admin frontend covers members, employers, payroll, retirement cases, config, and API keys — several backend modules don't have UI pages yet.
+
+The road to beta — remaining UI pages, member search and bulk import, and operational reports — is laid out in [`docs/BETA_PLAN.md`](docs/BETA_PLAN.md). Story-level coverage is tracked in [`tests/USER_STORIES.md`](tests/USER_STORIES.md). The member portal is a later, separate phase. Not production-ready.
 
 ---
 

@@ -111,7 +111,8 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | Employer billing | `app/services/billing_service.py` | Contribution rates (specificity hierarchy); deficiency + supplemental invoices; rate variance warnings in payroll |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
-**Backlog items:** `docs/BACKLOG.md`
+**Backlog items:** `docs/BACKLOG.md`  
+**Beta roadmap (phased, story-ID-linked):** `docs/BETA_PLAN.md`
 
 ---
 
