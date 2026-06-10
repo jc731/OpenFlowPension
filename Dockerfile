@@ -4,8 +4,14 @@ WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+# fonts + WeasyPrint runtime libraries (pango/gobject/harfbuzz)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
+    libglib2.0-0 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    libharfbuzz-subset0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
