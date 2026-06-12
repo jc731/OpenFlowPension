@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.billing import (
     DeficiencyCalcRequest,
@@ -33,7 +33,7 @@ async def create_rate(
     session: AsyncSession = Depends(get_session),
     principal: Principal = Depends(require_scope("admin")),
 ):
-    created_by = uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+    created_by = principal_uuid(principal)
     async with session.begin():
         rate = await billing_service.create_rate(
             employee_rate=body.employee_rate,
@@ -90,7 +90,7 @@ async def create_deficiency_invoice(
     session: AsyncSession = Depends(get_session),
     principal: Principal = Depends(require_scope("admin")),
 ):
-    created_by = uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+    created_by = principal_uuid(principal)
     async with session.begin():
         try:
             invoice = await billing_service.create_deficiency_invoice(
@@ -115,7 +115,7 @@ async def create_supplemental_invoice(
     session: AsyncSession = Depends(get_session),
     principal: Principal = Depends(require_scope("admin")),
 ):
-    created_by = uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+    created_by = principal_uuid(principal)
     async with session.begin():
         invoice = await billing_service.create_supplemental_invoice(
             employer_id=employer_id,
@@ -187,7 +187,7 @@ async def void_invoice(
     session: AsyncSession = Depends(get_session),
     principal: Principal = Depends(require_scope("admin")),
 ):
-    voided_by = uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+    voided_by = principal_uuid(principal)
     async with session.begin():
         invoice = await billing_service.get_invoice(invoice_id, session)
         if invoice is None:
@@ -210,7 +210,7 @@ async def record_payment(
     session: AsyncSession = Depends(get_session),
     principal: Principal = Depends(require_scope("admin")),
 ):
-    received_by = uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+    received_by = principal_uuid(principal)
     async with session.begin():
         invoice = await billing_service.get_invoice(invoice_id, session)
         if invoice is None:

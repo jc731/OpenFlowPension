@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable
 from typing import TypedDict
 
@@ -20,6 +21,19 @@ class Principal(TypedDict):
     id: str
     principal_type: str  # 'user' | 'api_key'
     scopes: list[str]
+
+
+def principal_uuid(principal: Principal) -> uuid.UUID | None:
+    """Principal id as UUID for created_by/approved_by-style audit columns.
+
+    Returns None when the id is not a UUID (dev-admin stub, legacy 'admin').
+    Use this instead of uuid.UUID(principal["id"]) — the raw conversion
+    raises in development mode.
+    """
+    try:
+        return uuid.UUID(principal["id"])
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 def require_scope(*scopes: str) -> Callable:

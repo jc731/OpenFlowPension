@@ -118,9 +118,9 @@ export interface BenefitEstimate {
 
 export const membersApi = {
   list: (params?: { status?: string; search?: string; limit?: number; offset?: number }) =>
-    api.get<Member[]>('/members', { params }),
+    api.get<Member[]>('/members/', { params }),
   get: (id: string) => api.get<Member>(`/members/${id}`),
-  create: (data: MemberCreate) => api.post<Member>('/members', data),
+  create: (data: MemberCreate) => api.post<Member>('/members/', data),
   estimate: (id: string, retirementDate: string) =>
     api.get<BenefitEstimate>(`/members/${id}/benefit-estimate`, {
       params: { retirement_date: retirementDate },
@@ -130,7 +130,7 @@ export const membersApi = {
 }
 
 export const employersApi = {
-  list: () => api.get<Employer[]>('/employers'),
+  list: () => api.get<Employer[]>('/employers/'),
   get: (id: string) => api.get<Employer>(`/employers/${id}`),
 }
 

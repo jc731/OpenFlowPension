@@ -356,8 +356,15 @@ async def list_all_payroll_reports(
     employer_id: uuid.UUID | None = None,
     limit: int = 100,
 ) -> list[PayrollReport]:
-    """List reports across all employers (admin/LOB view). No rows loaded — use get_payroll_report for detail."""
-    stmt = select(PayrollReport).order_by(PayrollReport.created_at.desc()).limit(limit)
+    """List reports across all employers (admin/LOB view)."""
+    # rows must be eagerly loaded: PayrollReportRead serializes them, and a
+    # lazy load during response serialization raises MissingGreenlet
+    stmt = (
+        select(PayrollReport)
+        .order_by(PayrollReport.created_at.desc())
+        .limit(limit)
+        .options(selectinload(PayrollReport.rows))
+    )
     if employer_id:
         stmt = stmt.where(PayrollReport.employer_id == employer_id)
     result = await session.execute(stmt)

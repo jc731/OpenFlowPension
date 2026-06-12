@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.services import api_key_service
 
@@ -70,7 +70,7 @@ async def create_api_key(
             scopes=body.scopes,
             session=session,
             expires_at=body.expires_at,
-            created_by=uuid.UUID(principal["id"]) if principal.get("id") and principal["id"] != "dev-admin" else None,
+            created_by=principal_uuid(principal),
             note=body.note,
         )
         await session.commit()

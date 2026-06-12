@@ -21,6 +21,7 @@ from app.services.payroll_service import (
     count_months_in_period,
     ingest_csv,
     ingest_json,
+    list_all_payroll_reports,
     list_payroll_reports,
     parse_csv,
 )
@@ -451,3 +452,18 @@ async def test_flagged_row_contributes_to_processed_count(session):
     assert report.error_count == 0
     statuses = {r.status for r in report.rows}
     assert statuses == {"applied", "flagged"}
+
+
+async def test_list_all_payroll_reports_serializable(session):
+    """Regression: rows must be eagerly loaded — a lazy load during response
+    serialization raises MissingGreenlet (broke GET /payroll-reports)."""
+    from app.schemas.payroll import PayrollReportRead
+
+    async with session.begin():
+        employer, _, _ = await _setup(session)
+        await ingest_json(employer.id, PayrollReportCreate(rows=[_row()]), session)
+
+    reports = await list_all_payroll_reports(session)
+    assert len(reports) == 1
+    validated = PayrollReportRead.model_validate(reports[0])
+    assert len(validated.rows) == 1

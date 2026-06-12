@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.services import survivor_service
 
@@ -107,7 +107,7 @@ async def create_benefit_election(
             beneficiary_id=body.beneficiary_id,
             beneficiary_age_at_election=body.beneficiary_age_at_election,
             reversionary_monthly_amount=body.reversionary_monthly_amount,
-            elected_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            elected_by=principal_uuid(principal),
             note=body.note,
         )
         await session.commit()
@@ -177,7 +177,7 @@ async def initiate_survivor_payments(
             event_date=body.event_date,
             session=session,
             payment_method=body.payment_method,
-            created_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            created_by=principal_uuid(principal),
         )
         await session.commit()
         return payments

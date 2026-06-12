@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.bank_account import BankAccountCreate, BankAccountRead
 from app.services import bank_account_service
@@ -27,7 +27,7 @@ async def add_bank_account(
     async with session.begin():
         return await bank_account_service.add_bank_account(
             member_id, data, session,
-            created_by=uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None,
+            created_by=principal_uuid(principal),
         )
 
 

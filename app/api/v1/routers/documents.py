@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_scope
+from app.api.deps import get_current_user, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.document import (
     DocumentTemplateCreate,
@@ -52,7 +52,7 @@ async def generate_document(
     """Generate a document for a member and persist an audit record.
     Use GET /documents/{id}/download to retrieve the PDF."""
     require_scope(principal, "member:read")
-    generated_by = uuid.UUID(principal["id"]) if principal.get("id") else None
+    generated_by = principal_uuid(principal)
     try:
         doc = await svc.generate_for_member(
             slug=req.slug,

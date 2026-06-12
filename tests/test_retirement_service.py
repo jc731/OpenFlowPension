@@ -431,3 +431,12 @@ async def test_get_case_not_found(session: AsyncSession):
     import uuid
     with pytest.raises(ValueError, match="not found"):
         await retirement_service.get_case(uuid.uuid4(), session)
+
+
+async def test_list_all_cases(session: AsyncSession, draft_case: RetirementCase):
+    cases = await retirement_service.list_all_cases(session)
+    assert [c.id for c in cases] == [draft_case.id]
+
+    drafts = await retirement_service.list_all_cases(session, status="draft")
+    assert len(drafts) == 1
+    assert await retirement_service.list_all_cases(session, status="active") == []

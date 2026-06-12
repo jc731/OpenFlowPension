@@ -274,6 +274,19 @@ async def list_cases(
     return list(result.scalars().all())
 
 
+async def list_all_cases(
+    session: AsyncSession,
+    status: str | None = None,
+    limit: int = 100,
+) -> list[RetirementCase]:
+    """List cases across all members (admin/LOB work-queue view)."""
+    stmt = select(RetirementCase).order_by(RetirementCase.created_at.desc()).limit(limit)
+    if status:
+        stmt = stmt.where(RetirementCase.status == status)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
 async def _get_case_or_raise(case_id: uuid.UUID, session: AsyncSession) -> RetirementCase:

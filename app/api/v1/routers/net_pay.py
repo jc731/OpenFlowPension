@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_scope
+from app.api.deps import get_current_user, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.net_pay import (
     NetPayRequest,
@@ -87,7 +87,7 @@ async def apply_payment_net_pay(
         result = await svc.apply_net_pay(
             payment_id,
             session,
-            applied_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            applied_by=principal_uuid(principal),
         )
     except ValueError as e:
         msg = str(e)

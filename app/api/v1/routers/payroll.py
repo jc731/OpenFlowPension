@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.payroll import PayrollReportCreate, PayrollReportRead
 from app.services import payroll_service
@@ -39,7 +39,7 @@ async def ingest_json(
     principal: Principal = Depends(require_scope("payroll:write")),
 ):
     submitted_by = (
-        uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+        principal_uuid(principal)
     )
     async with session.begin():
         return await payroll_service.ingest_json(employer_id, data, session, submitted_by=submitted_by)
@@ -53,7 +53,7 @@ async def upload_csv(
     principal: Principal = Depends(require_scope("payroll:write")),
 ):
     submitted_by = (
-        uuid.UUID(principal["id"]) if principal["id"] not in ("admin", "dev-admin") else None
+        principal_uuid(principal)
     )
     content = await file.read()
     try:

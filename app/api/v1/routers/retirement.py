@@ -3,6 +3,7 @@
 Routes:
   POST  /members/{member_id}/retirement-cases
   GET   /members/{member_id}/retirement-cases
+  GET   /retirement-cases
   GET   /retirement-cases/{case_id}
   POST  /retirement-cases/{case_id}/recalculate
   POST  /retirement-cases/{case_id}/approve
@@ -19,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import Principal, require_scope
+from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.services import retirement_service
 
@@ -109,7 +110,7 @@ async def create_retirement_case(
             beneficiary_id=body.beneficiary_id,
             beneficiary_age_at_retirement=body.beneficiary_age_at_retirement,
             desired_reversionary_monthly=body.desired_reversionary_monthly,
-            created_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            created_by=principal_uuid(principal),
             note=body.note,
         )
         await session.commit()
@@ -128,6 +129,19 @@ async def list_retirement_cases(
     session: AsyncSession = Depends(get_session),
 ):
     return await retirement_service.list_cases(member_id, session)
+
+
+@router.get(
+    "/retirement-cases",
+    response_model=list[RetirementCaseRead],
+    dependencies=[Depends(require_scope("member:read"))],
+)
+async def list_all_retirement_cases(
+    status: str | None = None,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+):
+    return await retirement_service.list_all_cases(session, status=status, limit=limit)
 
 
 @router.get(
@@ -175,7 +189,7 @@ async def approve_retirement_case(
         case = await retirement_service.approve_case(
             case_id=case_id,
             session=session,
-            approved_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            approved_by=principal_uuid(principal),
         )
         await session.commit()
         return case
@@ -200,7 +214,7 @@ async def activate_retirement_case(
             session=session,
             payment_method=body.payment_method,
             bank_account_id=body.bank_account_id,
-            activated_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            activated_by=principal_uuid(principal),
         )
         await session.commit()
         return case
@@ -222,7 +236,7 @@ async def cancel_retirement_case(
         case = await retirement_service.cancel_case(
             case_id=case_id,
             session=session,
-            cancelled_by=uuid.UUID(principal["id"]) if principal.get("id") else None,
+            cancelled_by=principal_uuid(principal),
             cancel_reason=body.cancel_reason,
         )
         await session.commit()

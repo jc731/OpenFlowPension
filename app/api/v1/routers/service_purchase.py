@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_scope
+from app.api.deps import get_current_user, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.service_purchase import (
     ApprovePurchaseClaimRequest,
@@ -50,7 +50,7 @@ async def create_claim(
 ):
     """Create a purchase claim (status=draft). Runs the cost calculation and persists the snapshot."""
     require_scope(principal, "member:write")
-    created_by = uuid.UUID(principal["id"]) if principal.get("id") else None
+    created_by = principal_uuid(principal)
     try:
         claim = await svc.create_claim(member_id, data, session, created_by=created_by)
     except ValueError as e:
@@ -107,7 +107,7 @@ async def approve_claim(
 ):
     """Transition pending_approval → approved. Grants credit immediately if credit_grant_on='approval'."""
     require_scope(principal, "member:write")
-    approver_id = uuid.UUID(principal["id"]) if principal.get("id") else uuid.uuid4()
+    approver_id = principal_uuid(principal) or uuid.uuid4()
     claim = _claim_or_404(await svc.get_claim(claim_id, session), claim_id)
     try:
         claim = await svc.approve_claim(claim, approver_id, session, notes=req.notes)
@@ -147,7 +147,7 @@ async def record_payment(
 ):
     """Record a payment. Auto-completes the claim and grants service credit when fully paid."""
     require_scope(principal, "member:write")
-    received_by = uuid.UUID(principal["id"]) if principal.get("id") else None
+    received_by = principal_uuid(principal)
     claim = _claim_or_404(await svc.get_claim(claim_id, session), claim_id)
     try:
         payment = await svc.record_payment(claim, data, session, received_by=received_by)
