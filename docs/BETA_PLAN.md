@@ -39,6 +39,23 @@ Largest chunk of beta work. Backend APIs exist for all of these; the pages don't
 - [ ] **System config editing** (US-UI13) — config page is currently view-oriented; add guarded editing
 - [ ] Surface Phase 1 features in the UI: member search on MemberList, address/contact on MemberDetail
 
+### Flagged in UI screenshot review (2026-06-12)
+
+Reviewed all 9 admin pages at 1920×1080 and 1280×800 with seeded data. Layout holds up at both sizes — no overflow or clipping anywhere. Functional/content flags to fold into Phase 2 (not yet fixed):
+
+- [ ] Dashboard "Total Members" shows the length of a `limit: 5` fetch (displays 5 when 9 exist) — needs a count/stats endpoint
+- [ ] "Plan" column (member list) and "Plan Choice" card (member detail) show lock state (Open/Locked), never the actual plan tier/type names
+- [ ] Member detail "Member Since" displays `created_at` (record import date) — misleading; should be certification or first hire date
+- [ ] Status vocabulary drift: seed script sets Jane to `retired`, contract service uses `annuitant`; badges render raw snake_case (`on_leave`)
+- [ ] PayrollDetail has no badge mapping for `flagged` rows — they fall back to "Pending" (actively misleading); row `validation_warnings` never displayed
+- [ ] Member list search is client-side over the ≤100 fetched rows — wire it to the new server-side `q`/`status`/`employer_id` params
+- [ ] Retirement Cases list shows truncated case UUID but no member name/number — staff can't tell whose case it is (list endpoint needs a member join)
+- [ ] API Keys page has no empty-state message (blank table body); empty states inconsistent across pages
+- [ ] System Config page is a hardcoded key list with descriptions only — no actual values from the DB, no editing (US-CF04/US-UI13)
+- [ ] `make seed` doesn't seed `employment_types`/`leave_types` (CLAUDE.md claims it does) — hiring via API fails on a fresh dev environment; backfilled manually in the dev DB
+
+Dev-mode breakage found and **fixed** during this review (commit `e001b91`): trailing-slash 307s emptying every list page in dev, Vite proxy shadowing the `/api-keys` SPA route, `GET /payroll-reports` 500 (lazy-load), missing `GET /retirement-cases` endpoint, and `uuid.UUID(principal["id"])` crashes under the dev-bypass principal (now `principal_uuid()` in deps).
+
 ## Phase 3 — Minimum reports (US-RP01–05)
 
 - [ ] **Contribution reconciliation** (US-RP01) — employer/employee contributions by employer over a date range
