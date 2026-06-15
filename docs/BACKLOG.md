@@ -36,6 +36,22 @@ High complexity; rules vary significantly by fund. Do not implement speculativel
 
 ---
 
+## Service purchase — refund repayment: certification date restoration
+
+When a member repays a separation refund via the `refund` SCP type, the intent is to restore their original certification date (re-establishing their service record as if the refund never happened). The member model has `certification_date`, `certification_date_source`, and `certification_date_set_by` for exactly this purpose, but the service purchase completion logic (`_grant_credit()`) does not touch `certification_date`.
+
+**What's needed:** On claim completion (or approval, per `credit_grant_on` config), if `purchase_type == "refund"`, update `member.certification_date` to `params["original_certification_date"]` (stored on the claim at creation time) and set `certification_date_source = "refund_repayment"`. This ensures the benefit calculator uses the correct original cert date for tier determination.
+
+---
+
+## SSN duplicate detection on hire
+
+H1 hero scenario requires rejecting a new hire if an SSN already exists. SSN is stored as Fernet-encrypted bytes (`ssn_encrypted`) — Fernet uses a random IV so the same SSN produces a different ciphertext each time, making DB-level uniqueness checks impossible on the encrypted field.
+
+**What's needed:** Add a `ssn_hash` column (`VARCHAR(64)`, unique, nullable) to the `members` table — a SHA-256 of the canonical 9-digit SSN stored in hex. Set it at create time alongside `ssn_encrypted`. At hire, check `SELECT 1 FROM members WHERE ssn_hash = :hash` before inserting. Migration: backfill `ssn_hash` for existing rows (requires decrypting each SSN at migration time).
+
+---
+
 ## Service purchase — refund_repayment calc method
 
 The `refund_repayment` calc method is stubbed and raises `ValueError`. Refund repayment cost = original refund amount + compound interest from refund date to repayment date at a fund-specific rate.
@@ -108,9 +124,95 @@ The `form_submissions` table and `FormSubmission` model already exist (stubbed a
 
 ---
 
-## Member portal frontend
+## Self-service portals (ESS + MSS)
 
-Separate frontend from the admin/LOB app. Architecture undecided (Astro, Vite, etc.) — evaluate when feature scope is clearer.
+Two separate frontends, both driven 100% by the existing REST API. Neither portal owns any business logic — they are pure consumers of the API and must remain severable (replaceable by any other portal, or by a third-party integration, without backend changes).
+
+**Employer Self-Service (ESS):** Employer-facing portal for submitting new hires, terminations, payroll reports, and demographic updates. The underlying API endpoints already exist (hire, terminate, payroll upload, member search). ESS is an authenticated employer-scoped view over them with appropriate `employment:write` / `payroll:write` scope. Can be the existing admin frontend with employer-restricted auth, or a separate SPA.
+
+**Member Self-Service (MSS):** Member-facing portal. Key self-service surfaces: benefit estimate, service credit history, payment history, address/contact update, beneficiary designation, tax withholding election (W-4P), document download, retirement scheduling. All backed by existing API endpoints — no new backend work required for basic MSS. Member auth via Keycloak with a member-scope role (narrower than fund staff).
+
+**Architecture principle:** Both portals must call the API exclusively — no direct DB access, no shared server-side logic. This keeps them replaceable and allows the same API to power third-party integrations (HR systems, payroll providers) without code changes.
+
+**Prioritize MSS after:** retirement case workflow is stable and at least one live fund is in pilot.
+
+---
+
+## Return to Work (RTW) — affected annuitant + FAE billing
+
+When a SURS annuitant returns to covered employment, two different rules apply depending on annuitant sub-type:
+
+- **Affected annuitant:** annuity is NOT paused. Employer is billed for the RTW employment. FAE billing fires separately if the RTW salary exceeds the original FAE threshold (salary spike billing against the employer).
+- **Re-retiree:** different RTW rules (annuity may be paused, no FAE billing).
+
+**What's needed:**
+- New `annuitant_type` field on the member or a new RTW employment record flag (`rtw_affected` boolean on `EmploymentRecord`).
+- RTW hire path in `contract_service` that allows hiring an annuitant without raising the current "already annuitant" block — the block should only prevent a new *retirement case*, not a new employment record.
+- RTW billing workflow in `billing_service`: fire an employer invoice when an affected annuitant is hired; a separate invoice type for FAE spike billing when RTW salary exceeds the member's original FAE.
+- Config keys for RTW earnings thresholds and billing rate.
+
+**Belongs under:** employer billing module.
+
+---
+
+## PLSR — Portable Lump Sum Retirement path
+
+PLSR is a retirement option available to Portable plan members: at retirement, the member receives a lump sum representing the portable (employee-contributed) portion of their account alongside a reduced ongoing monthly annuity. It is not a full lump sum exit — it is a split-disbursement retirement.
+
+The `lump_sum` benefit option type is registered in the calculator but currently stubs back to `single_life`. PLSR is the correct named path.
+
+**What's needed:**
+- `benefit_option_type = "plsr"` as a valid option in the retirement case (alongside `single_life`, `reversionary`, `js_*`).
+- PLSR calculation: determine the portable account balance (employee contributions + credited interest); compute the residual monthly annuity on the employer-funded portion; return both amounts in `BenefitOptionResult`.
+- Two payment disbursements at retirement activation: one-time PLSR lump sum + first recurring annuity payment.
+- `RetirementCase.plsr_lump_sum_amount` field (or store in `calculation_snapshot` JSONB — no schema change required if using snapshot).
+- Disbursement form template for the PLSR payout.
+
+**Design note:** PLSR availability should be gated on `plan_type == "portable"` — raise `ValueError` otherwise (matching the existing J&S gate pattern).
+
+---
+
+## RSP (Defined Contribution) plan type + supplemental DC
+
+RSP (Retirement Savings Plan) is a defined-contribution plan variant where member contributions go to an external investment provider (Voya) rather than the fund's defined-benefit pool. This is architecturally different from Traditional and Portable plans.
+
+Two distinct use cases:
+1. **RSP as primary plan:** member elects RSP at enrollment instead of Traditional/Portable. All contributions route to Voya via SPARK (a payroll contribution interface). Retirement is either an annuitized exit (Voya manages the annuity stream) or a non-annuitized lump sum distribution.
+2. **Supplemental DC:** regular DB plan member contributes additionally to a DC account (supplemental savings alongside the defined-benefit pension).
+
+**What's needed for RSP primary:**
+- New `plan_type = "rsp"` in `plan_choice_service` (currently only `traditional` / `portable` accepted).
+- RSP part account entity (separate from `contribution_records` — tracks Voya account balance, not fund-held contributions).
+- SPARK file exchange: outbound contribution file to Voya each payroll cycle (fixed-format or API); inbound balance confirmation. Likely a Celery task.
+- RSP termination workflow: SPARK contribution drops to $0; termination record created; no separation refund path (member goes directly to Voya for distribution).
+- RSP retirement paths:
+  - Annuitized: Voya manages ongoing annuity; SURS records the annuitization event.
+  - Non-annuitized: Voya distributes lump sum; member status → inactive; no SURS annuity stream.
+- Blocked rehire: if `plan_type == "rsp"` and `member_status == "annuitant"`, reject any new hire into SURS-covered employment.
+- Death benefit: depends on election at enrollment (remaining account balance to beneficiary vs continued annuity to survivor).
+
+**Design note:** RSP is substantial enough to warrant its own service module (`app/services/rsp_service.py`) and models. Do not bolt onto existing `service_purchase` or `payment` tables.
+
+---
+
+## QILDRO — Qualified Illinois Domestic Relations Order
+
+A QILDRO is a court order — issued in divorce proceedings — that entitles an ex-spouse (the "alternate payee") to a share of the member's pension. It is NOT a third-party deduction order (like a union dues deduction to a `ThirdPartyEntity`). The alternate payee receives their share as an independent payment stream, effectively a pseudo-annuity derived from the member's benefit.
+
+**Conceptual model:**
+- The QILDRO reduces the member's annuity by the court-ordered percentage or fixed amount.
+- The alternate payee receives the carved-out portion as their own recurring payment.
+- The alternate payee is more like a pseudo-member than a third-party entity — they have their own bank account, their own 1099-R, and survive the member's death up to the terms of the order.
+
+**What's needed:**
+- `QILDROOrder` model: links member → alternate payee; stores court order reference, effective date, expiration/end condition, calculation method (percentage of benefit vs fixed amount), and status (active / terminated / expired).
+- Alternate payee record: can reuse `Beneficiary` extended with an `alternate_payee` type, or a lightweight `AlternatePayee` entity (name, DOB, SSN, bank account). The pseudo-member approach is cleaner than reusing `Beneficiary` — consider adding `alternate_payee_type` to the beneficiary model.
+- Benefit calculation impact: `calculate_benefit()` must accept active QILDROs and reduce the member's annuity accordingly. Store the pre- and post-QILDRO amounts in `RetirementCase.calculation_snapshot`.
+- Payment split at disbursement: when a member payment is issued, generate a corresponding alternate payee payment for the QILDRO share (append-only, same ledger pattern as `PaymentDeduction` but routes to a separate payee).
+- Death handling: on member death, QILDRO terms determine whether alternate payee continues receiving payments, receives a lump sum, or the order terminates. Needs a `qildro_death_treatment` field on the order.
+- 1099-R: alternate payee receives their own 1099-R for their share (same as a regular annuity recipient).
+
+**Relationship to existing models:** `DeductionOrder.source_document_type = "court_order"` exists for routing garnishments to a `ThirdPartyEntity`, but QILDRO is structurally different — the alternate payee has ongoing rights and needs their own payment record, not a deduction off the member's net pay to a payee org.
 
 ---
 
