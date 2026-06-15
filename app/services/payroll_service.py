@@ -25,12 +25,13 @@ from sqlalchemy.orm import selectinload
 
 from app.models.employment import EmploymentRecord
 from app.models.member import Member
+from app.models.plan_config import PlanType
 from app.models.payroll import ContributionRecord, PayrollReport, PayrollReportRow
 from app.models.service_credit import ServiceCreditEntry
 from app.schemas.payroll import PayrollReportCreate, PayrollRowInput
 from app.services.billing_service import build_rate_cache, check_contribution_variance, lookup_rate_from_cache
 from app.services.config_service import ConfigNotFoundError, get_config
-from app.services.payroll_validation_service import validate_fund, validate_system
+from app.services.payroll_validation_service import check_plan_type_earnings_cap, validate_fund, validate_system
 
 
 # ── CSV expected columns ───────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ async def _process_row(
     employer_id: uuid.UUID,
     session: AsyncSession,
     rate_cache: dict | None = None,
+    fund_validation_config: dict | None = None,
 ) -> None:
     # 1. Member lookup
     member_result = await session.execute(
@@ -126,6 +128,20 @@ async def _process_row(
         return
 
     row.member_id = member.id
+
+    # 1b. Plan-type earnings cap check (requires member, so runs here not in validate_fund)
+    if fund_validation_config and member.plan_type_id:
+        plan_type = await session.get(PlanType, member.plan_type_id)
+        plan_code = plan_type.plan_code if plan_type else None
+        from decimal import Decimal as _D
+        cap_warnings = check_plan_type_earnings_cap(_D(str(row.gross_earnings)), fund_validation_config, plan_code)
+        if cap_warnings:
+            existing = list(row.validation_warnings or [])
+            row.validation_warnings = existing + cap_warnings
+            if fund_validation_config.get("mode") == "reject":
+                row.status = "error"
+                row.error_message = "Fund validation: " + "; ".join(cap_warnings)
+                return
 
     # 2. Active employment at this employer
     emp_result = await session.execute(
@@ -296,7 +312,7 @@ async def ingest_json(
                 row_statuses.append(row.status)
                 continue
 
-        await _process_row(row, employer_id, session, rate_cache=rate_cache)
+        await _process_row(row, employer_id, session, rate_cache=rate_cache, fund_validation_config=fund_validation_config)
 
         # Promote applied → flagged when any warnings exist (fund or rate variance)
         all_warnings = row.validation_warnings or []

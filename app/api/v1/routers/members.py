@@ -10,7 +10,7 @@ from app.database import get_session
 from app.schemas.address import MemberAddressCreate, MemberAddressRead
 from app.schemas.benefit import BenefitCalculationResult, BenefitOptionRequest
 from app.schemas.contact import MemberContactCreate, MemberContactRead
-from app.schemas.member import MemberCreate, MemberImportResult, MemberRead
+from app.schemas.member import MemberCreate, MemberImportResult, MemberNameHistoryRead, MemberNameUpdate, MemberRead
 from app.services import benefit_estimate_service, member_service, plan_choice_service
 
 router = APIRouter(prefix="/members", tags=["members"])
@@ -75,6 +75,36 @@ async def create_member(
     _: Principal = Depends(require_scope("member:write")),
 ):
     return await member_service.create_member(data, session)
+
+
+@router.patch("/{member_id}/name", response_model=MemberRead)
+async def update_member_name(
+    member_id: uuid.UUID,
+    data: MemberNameUpdate,
+    session: AsyncSession = Depends(get_session),
+    principal: Principal = Depends(require_scope("member:write")),
+):
+    from app.api.deps import principal_uuid
+    try:
+        return await member_service.update_name(
+            member_id,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            middle_name=data.middle_name,
+            suffix=data.suffix,
+            effective_date=data.effective_date,
+            reason=data.reason,
+            changed_by=principal_uuid(principal),
+            session=session,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/{member_id}/name-history", response_model=list[MemberNameHistoryRead],
+            dependencies=[Depends(require_scope("member:read"))])
+async def list_name_history(member_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
+    return await member_service.list_name_history(member_id, session)
 
 
 @router.get("/{member_id}/addresses", response_model=list[MemberAddressRead],

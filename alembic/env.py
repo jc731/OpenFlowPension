@@ -20,6 +20,19 @@ import app.models.employment   # noqa: F401
 import app.models.salary       # noqa: F401
 import app.models.leave        # noqa: F401
 import app.models.service_credit  # noqa: F401
+import app.models.bank_account    # noqa: F401
+import app.models.payment         # noqa: F401
+import app.models.payroll         # noqa: F401
+import app.models.member_status   # noqa: F401
+import app.models.leave_period    # noqa: F401
+import app.models.benefit_election  # noqa: F401
+import app.models.retirement_case   # noqa: F401
+import app.models.api_key            # noqa: F401
+import app.models.third_party_entity  # noqa: F401
+import app.models.document            # noqa: F401
+import app.models.service_purchase    # noqa: F401
+import app.models.billing             # noqa: F401
+import app.models.member_name_history  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,17 +1,18 @@
 import csv
 import io
 import uuid
-from datetime import timedelta
+from datetime import date, timedelta
 
 from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crypto import encrypt_ssn
+from app.crypto import encrypt_ssn, hash_ssn
 from app.models.address import MemberAddress
 from app.models.contact import MemberContact
 from app.models.employment import EmploymentRecord
 from app.models.member import Member
+from app.models.member_name_history import MemberNameHistory
 from app.schemas.address import MemberAddressCreate
 from app.schemas.contact import MemberContactCreate
 from app.schemas.member import (
@@ -22,9 +23,14 @@ from app.schemas.member import (
 
 
 async def create_member(data: MemberCreate, session: AsyncSession) -> Member:
+    ssn_h = hash_ssn(data.ssn)
+    existing = await session.execute(select(Member).where(Member.ssn_hash == ssn_h).limit(1))
+    if existing.scalar_one_or_none() is not None:
+        raise ValueError("A member with this SSN already exists")
     member = Member(
         ssn_encrypted=encrypt_ssn(data.ssn),
         ssn_last_four=data.ssn[-4:],
+        ssn_hash=ssn_h,
         **data.model_dump(exclude={"ssn"}),
     )
     session.add(member)
@@ -68,6 +74,53 @@ async def list_members(
             stmt = stmt.where(EmploymentRecord.employment_type == employment_type)
     stmt = stmt.order_by(Member.last_name, Member.first_name).limit(limit).offset(offset)
     result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+# ── Name change history ────────────────────────────────────────────────────────
+
+async def update_name(
+    member_id: uuid.UUID,
+    *,
+    first_name: str,
+    last_name: str,
+    effective_date: date,
+    reason: str | None,
+    changed_by: uuid.UUID | None,
+    middle_name: str | None = None,
+    suffix: str | None = None,
+    session: AsyncSession,
+) -> Member:
+    """Update member's legal name, writing the outgoing name to member_name_history first."""
+    member = await get_member(member_id, session)
+    if not member:
+        raise ValueError("Member not found")
+
+    session.add(MemberNameHistory(
+        member_id=member_id,
+        first_name=member.first_name,
+        middle_name=member.middle_name,
+        last_name=member.last_name,
+        suffix=member.suffix,
+        effective_date=effective_date,
+        reason=reason,
+        changed_by=changed_by,
+    ))
+
+    member.first_name = first_name
+    member.last_name = last_name
+    member.middle_name = middle_name if middle_name is not None else member.middle_name
+    member.suffix = suffix if suffix is not None else member.suffix
+    await session.flush()
+    return member
+
+
+async def list_name_history(member_id: uuid.UUID, session: AsyncSession) -> list[MemberNameHistory]:
+    result = await session.execute(
+        select(MemberNameHistory)
+        .where(MemberNameHistory.member_id == member_id)
+        .order_by(MemberNameHistory.effective_date.desc())
+    )
     return list(result.scalars().all())
 
 
@@ -177,6 +230,7 @@ async def bulk_import_members(csv_text: str, session: AsyncSession) -> MemberImp
 
     errors: list[MemberImportRowError] = []
     seen_in_batch: set[str] = set()
+    seen_hashes_in_batch: set[str] = set()
     created = 0
 
     for line, raw in enumerate(raw_rows, start=2):  # header is line 1
@@ -202,18 +256,32 @@ async def bulk_import_members(csv_text: str, session: AsyncSession) -> MemberImp
             except ValidationError as exc:
                 error = "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors())
 
+        if error is None and data is not None:
+            ssn_h = hash_ssn(data.ssn)
+            if ssn_h in seen_hashes_in_batch:
+                error = "duplicate SSN within file"
+            else:
+                dup = await session.execute(
+                    select(Member.id).where(Member.ssn_hash == ssn_h).limit(1)
+                )
+                if dup.scalar_one_or_none() is not None:
+                    error = "SSN already exists in system"
+
         if error is not None or data is None:
             errors.append(MemberImportRowError(row=line, member_number=member_number, error=error or "invalid row"))
             continue
 
+        ssn_h = hash_ssn(data.ssn)
         session.add(
             Member(
                 ssn_encrypted=encrypt_ssn(data.ssn),
                 ssn_last_four=data.ssn[-4:],
+                ssn_hash=ssn_h,
                 **data.model_dump(exclude={"ssn"}),
             )
         )
         seen_in_batch.add(member_number)
+        seen_hashes_in_batch.add(ssn_h)
         created += 1
 
     await session.commit()

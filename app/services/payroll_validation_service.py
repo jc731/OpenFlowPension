@@ -36,15 +36,46 @@ def validate_system(row: PayrollRowInput) -> list[str]:
     return errors
 
 
+def check_plan_type_earnings_cap(
+    gross_earnings: Decimal,
+    config: dict,
+    plan_type_code: str | None,
+) -> list[str]:
+    """Per-plan-type earnings cap check. Called after member lookup provides plan_type_code.
+
+    Config keys (from payroll_validation_config):
+        earnings_cap_by_plan_type — dict mapping plan_code → per-period cap amount
+        irs_401a17_limit          — global IRS cap used when plan_type_code has no entry
+    """
+    cap_dict = config.get("earnings_cap_by_plan_type", {})
+    if not cap_dict and "irs_401a17_limit" not in config:
+        return []
+
+    if plan_type_code and plan_type_code in cap_dict:
+        cap = Decimal(str(cap_dict[plan_type_code]))
+        label = f"plan type '{plan_type_code}'"
+    elif "irs_401a17_limit" in config:
+        cap = Decimal(str(config["irs_401a17_limit"]))
+        label = "IRS 401(a)(17)"
+    else:
+        return []
+
+    if gross_earnings > cap:
+        return [f"gross_earnings {gross_earnings} exceeds {label} annual earnings cap {cap}"]
+    return []
+
+
 def validate_fund(row: PayrollRowInput, config: dict) -> list[str]:
     """Fund-specific threshold checks. Returns a list of warning strings; empty = pass.
 
     config keys (all optional; missing key skips that check):
-        max_gross_earnings         — per-period cap
+        max_gross_earnings         — per-period cap (global fallback; use earnings_cap_by_plan_type for per-type)
         max_days_per_period        — per-period day cap
         employee_contribution_rate — expected rate as decimal (e.g. 0.08)
         employer_contribution_rate — expected rate as decimal (e.g. 0.05)
         contribution_rate_tolerance — allowed deviation (e.g. 0.005 = ±0.5%)
+        earnings_cap_by_plan_type  — plan-code → cap dict; evaluated in _process_row after member lookup
+        irs_401a17_limit           — global IRS cap; evaluated in _process_row after member lookup
     """
     warnings: list[str] = []
 
@@ -53,7 +84,7 @@ def validate_fund(row: PayrollRowInput, config: dict) -> list[str]:
     except InvalidOperation:
         return warnings
 
-    # Gross earnings cap
+    # Gross earnings cap (global fallback only — plan-type-specific cap handled in _process_row)
     if "max_gross_earnings" in config:
         cap = Decimal(str(config["max_gross_earnings"]))
         if gross > cap:

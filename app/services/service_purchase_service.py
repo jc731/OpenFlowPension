@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.employment import EmploymentRecord
+from app.models.member import Member
 from app.models.salary import SalaryHistory
 from app.models.service_credit import ServiceCreditEntry
 from app.models.service_purchase import ServicePurchaseClaim, ServicePurchasePayment
@@ -83,18 +84,59 @@ def _calc_rate_based(credit_years: Decimal, annual_salary: Decimal, type_cfg: di
     return cost, breakdown
 
 
-def _calc_refund_repayment(credit_years: Decimal, type_cfg: dict) -> tuple[Decimal, dict]:
-    raise ValueError(
-        "calc_method 'refund_repayment' is not yet implemented. "
-        "Refund repayment cost requires the original refund amount and fund-specific interest "
-        "compounding rules. This type will be implemented as a dedicated endpoint once those "
-        "rules are confirmed. Use a manual override or contact fund staff."
-    )
+def _calc_refund_repayment(
+    credit_years: Decimal,
+    type_cfg: dict,
+    params: dict,
+    repayment_date: date,
+) -> tuple[Decimal, dict]:
+    """Cost = original_refund_amount × (1 + interest_rate) ^ elapsed_years.
+
+    Required params keys:
+        original_refund_amount — amount taken at separation (string or numeric)
+        refund_date            — ISO date string when the refund was paid out
+
+    interest_rate comes from type_cfg["interest_rate"] (default 0.065).
+    Partial-year handling uses actual days / 365.25.
+    """
+    try:
+        original = Decimal(str(params["original_refund_amount"]))
+    except (KeyError, Exception):
+        raise ValueError(
+            "params.original_refund_amount is required for refund_repayment calc — "
+            "provide the original refund amount on the claim"
+        )
+    try:
+        refund_date = date.fromisoformat(str(params["refund_date"]))
+    except (KeyError, Exception):
+        raise ValueError(
+            "params.refund_date is required for refund_repayment calc — "
+            "provide the ISO date when the member received the refund"
+        )
+
+    interest_rate = Decimal(str(type_cfg.get("interest_rate", "0.065")))
+    elapsed_days = (repayment_date - refund_date).days
+    if elapsed_days < 0:
+        raise ValueError("refund_date cannot be after the repayment date (period_end)")
+    elapsed_years = Decimal(str(elapsed_days)) / Decimal("365.25")
+
+    cost = (original * (1 + interest_rate) ** elapsed_years).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    breakdown = {
+        "method": "refund_repayment",
+        "original_refund_amount": str(original),
+        "refund_date": str(refund_date),
+        "repayment_date": str(repayment_date),
+        "interest_rate": str(interest_rate),
+        "elapsed_days": elapsed_days,
+        "elapsed_years": str(elapsed_years.quantize(Decimal("0.0001"))),
+        "cost_total": str(cost),
+    }
+    return cost, breakdown
 
 
 _CALC_METHODS = {
     "rate_based": _calc_rate_based,
-    "refund_repayment": _calc_refund_repayment,
 }
 
 
@@ -105,13 +147,14 @@ async def _run_calc(
     as_of: date,
     type_cfg: dict,
     session: AsyncSession,
+    params: dict | None = None,
 ) -> tuple[Decimal, dict]:
     method = type_cfg.get("calc_method", "rate_based")
     if method == "rate_based":
         salary = await _current_salary(member_id, as_of, session)
         return _calc_rate_based(credit_years, salary, type_cfg)
     elif method == "refund_repayment":
-        return _calc_refund_repayment(credit_years, type_cfg)
+        return _calc_refund_repayment(credit_years, type_cfg, params or {}, as_of)
     else:
         raise ValueError(f"Unknown calc_method '{method}' on purchase type '{purchase_type}'")
 
@@ -122,10 +165,11 @@ async def quote(
     member_id: uuid.UUID,
     req: ServicePurchaseQuoteRequest,
     session: AsyncSession,
+    params: dict | None = None,
 ) -> ServicePurchaseQuoteResult:
     as_of = req.period_end
     type_cfg = await _load_type_config(req.purchase_type, as_of, session)
-    cost, breakdown = await _run_calc(req.purchase_type, req.credit_years, member_id, as_of, type_cfg, session)
+    cost, breakdown = await _run_calc(req.purchase_type, req.credit_years, member_id, as_of, type_cfg, session, params=params)
     return ServicePurchaseQuoteResult(
         purchase_type=req.purchase_type,
         credit_entry_type=type_cfg["credit_entry_type"],
@@ -152,7 +196,7 @@ async def create_claim(
         pass  # noted on claim; enforced at payment recording
 
     cost, breakdown = await _run_calc(
-        data.purchase_type, data.credit_years, member_id, as_of, type_cfg, session
+        data.purchase_type, data.credit_years, member_id, as_of, type_cfg, session, params=data.params
     )
 
     claim = ServicePurchaseClaim(
@@ -299,3 +343,18 @@ async def _grant_credit(claim: ServicePurchaseClaim, session: AsyncSession) -> N
         note=f"Service purchase — type: {claim.purchase_type}, claim: {claim.id}",
     )
     session.add(entry)
+
+    # Refund repayment: restore certification date if configured and param provided
+    if claim.purchase_type == "refund":
+        cert_date_str = (claim.params or {}).get("cert_date_on_original_hire")
+        if cert_date_str:
+            type_cfg = await _load_type_config(claim.purchase_type, claim.period_end, session)
+            if type_cfg.get("restore_cert_date", True):
+                cert_date = date.fromisoformat(str(cert_date_str))
+                member_result = await session.execute(
+                    select(Member).where(Member.id == claim.member_id)
+                )
+                member = member_result.scalar_one()
+                member.certification_date = cert_date
+                member.certification_date_source = "refund_repayment"
+                member.certification_date_note = f"Restored via service purchase claim {claim.id}"

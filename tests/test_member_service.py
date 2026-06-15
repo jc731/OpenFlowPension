@@ -20,7 +20,15 @@ from app.services.member_service import (
     list_addresses,
     list_contacts,
     list_members,
+    update_name,
 )
+
+
+def _unique_ssn(seed: str) -> str:
+    """Derive a deterministic 9-digit SSN from a seed string."""
+    import hashlib
+    digest = hashlib.md5(seed.encode()).hexdigest()
+    return "".join(str(int(c, 16) % 10) for c in digest[:9])
 
 
 async def _make_member(session, member_number="M-1001", first="Jane", last="Smith"):
@@ -30,7 +38,7 @@ async def _make_member(session, member_number="M-1001", first="Jane", last="Smit
             first_name=first,
             last_name=last,
             date_of_birth=date(1970, 5, 1),
-            ssn="123456789",
+            ssn=_unique_ssn(member_number),
         ),
         session,
     )
@@ -227,15 +235,15 @@ async def test_bulk_import_all_rows_created(session):
 
 
 async def test_bulk_import_partial_success(session):
-    await _make_member(session, "M-1")  # collides with row 3
+    await _make_member(session, "M-1")  # unique SSN for M-1; member_number collides with row 3
     csv_text = "\n".join([
         CSV_HEADER,
-        "M-200,Jane,Smith,1970-05-01,123456789,,,",     # ok
-        "M-1,Dupe,Existing,1970-01-01,111223333,,,",     # already exists
-        "M-201,Bad,Ssn,1970-01-01,12345,,,",             # invalid SSN
-        "M-202,Bad,Date,not-a-date,123456789,,,",        # invalid date
-        "M-200,Dupe,InFile,1970-01-01,111223333,,,",     # dupe within file
-        ",NoNumber,Person,1970-01-01,111223333,,,",      # missing member_number
+        "M-200,Jane,Smith,1970-05-01,999887777,,,",     # ok (distinct SSN)
+        "M-1,Dupe,Existing,1970-01-01,111223333,,,",    # member_number already exists
+        "M-201,Bad,Ssn,1970-01-01,12345,,,",            # invalid SSN
+        "M-202,Bad,Date,not-a-date,999887777,,,",       # invalid date (caught before SSN check)
+        "M-200,Dupe,InFile,1970-01-01,111223333,,,",    # dupe within file
+        ",NoNumber,Person,1970-01-01,111223333,,,",     # missing member_number
     ])
     result = await bulk_import_members(csv_text, session)
 
@@ -257,3 +265,105 @@ async def test_bulk_import_missing_required_column(session):
     csv_text = "member_number,first_name,last_name\nM-1,Jane,Smith"
     with pytest.raises(ValueError, match="date_of_birth"):
         await bulk_import_members(csv_text, session)
+
+
+# ── SSN duplicate detection ────────────────────────────────────────────────────
+
+async def test_create_member_sets_ssn_hash(session):
+    from app.crypto import hash_ssn
+    member = await _make_member(session)
+    assert member.ssn_hash == hash_ssn(_unique_ssn("M-1001"))
+
+
+async def test_create_member_rejects_duplicate_ssn(session):
+    await _make_member(session, "M-1")
+    dup_ssn = _unique_ssn("M-1")
+    with pytest.raises(ValueError, match="SSN already exists"):
+        await create_member(
+            MemberCreate(member_number="M-2", first_name="Dup", last_name="SSN",
+                         date_of_birth=date(1980, 1, 1), ssn=dup_ssn),
+            session,
+        )
+
+
+async def test_bulk_import_rejects_ssn_duplicate_in_system(session):
+    m1 = await _make_member(session, "M-1")
+    m1_ssn = _unique_ssn("M-1")
+    csv_text = "\n".join([
+        CSV_HEADER,
+        f"M-200,Jane,Smith,1970-05-01,{m1_ssn},,,",  # SSN matches M-1
+    ])
+    result = await bulk_import_members(csv_text, session)
+    assert result.created_count == 0
+    assert result.errors[0].error == "SSN already exists in system"
+
+
+async def test_bulk_import_rejects_ssn_duplicate_within_file(session):
+    csv_text = "\n".join([
+        CSV_HEADER,
+        "M-200,Jane,Smith,1970-05-01,123456789,,,",
+        "M-201,Bob,Jones,1980-01-01,123456789,,,",   # same SSN as M-200
+    ])
+    result = await bulk_import_members(csv_text, session)
+    assert result.created_count == 1
+    assert result.errors[0].error == "duplicate SSN within file"
+
+
+# ── Name change history ────────────────────────────────────────────────────────
+
+async def test_update_name_records_history(session):
+    import uuid
+    member = await _make_member(session, first="Jane", last="Smith")
+    updated = await update_name(
+        member.id,
+        first_name="Jane",
+        last_name="Doe",
+        effective_date=date(2025, 6, 1),
+        reason="legal_change",
+        changed_by=uuid.uuid4(),
+        session=session,
+    )
+
+    assert updated.last_name == "Doe"
+
+    from sqlalchemy import select as sa_select
+    from app.models.member_name_history import MemberNameHistory
+    rows = (await session.execute(
+        sa_select(MemberNameHistory).where(MemberNameHistory.member_id == member.id)
+    )).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].last_name == "Smith"   # previous name captured
+    assert rows[0].reason == "legal_change"
+    assert rows[0].effective_date == date(2025, 6, 1)
+
+
+async def test_update_name_multiple_changes_build_history(session):
+    member = await _make_member(session, first="Alice", last="Walker")
+    await update_name(member.id, first_name="Alice", last_name="Baker",
+                      effective_date=date(2020, 1, 1), reason="legal_change",
+                      changed_by=None, session=session)
+    await update_name(member.id, first_name="Alice", last_name="Carter",
+                      effective_date=date(2024, 6, 1), reason="legal_change",
+                      changed_by=None, session=session)
+
+    from sqlalchemy import select as sa_select
+    from app.models.member_name_history import MemberNameHistory
+    rows = (await session.execute(
+        sa_select(MemberNameHistory).where(MemberNameHistory.member_id == member.id)
+        .order_by(MemberNameHistory.effective_date)
+    )).scalars().all()
+
+    assert len(rows) == 2
+    assert rows[0].last_name == "Walker"
+    assert rows[1].last_name == "Baker"
+
+    fresh = await session.get(type(member), member.id)
+    assert fresh.last_name == "Carter"
+
+
+async def test_update_name_unknown_member_raises(session):
+    import uuid
+    with pytest.raises(ValueError, match="Member not found"):
+        await update_name(uuid.uuid4(), first_name="X", last_name="Y",
+                          effective_date=date(2025, 1, 1), reason="legal_change",
+                          changed_by=None, session=session)

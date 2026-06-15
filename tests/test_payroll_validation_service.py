@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 
 from app.schemas.payroll import PayrollRowInput
-from app.services.payroll_validation_service import validate_fund, validate_system
+from app.services.payroll_validation_service import check_plan_type_earnings_cap, validate_fund, validate_system
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -216,3 +216,51 @@ def test_fund_zero_tolerance_any_deviation_warns():
         config,
     )
     assert any("employee contribution rate" in w for w in warnings)
+
+# ── Plan-type earnings cap ────────────────────────────────────────────────────
+
+def test_plan_type_cap_uses_plan_specific_value():
+    config = {"earnings_cap_by_plan_type": {"traditional": 50000, "rsp": 30000}}
+    warnings = check_plan_type_earnings_cap(Decimal("35000"), config, "rsp")
+    assert len(warnings) == 1
+    assert "rsp" in warnings[0]
+    assert "30000" in warnings[0]
+
+
+def test_plan_type_cap_no_warning_under_cap():
+    config = {"earnings_cap_by_plan_type": {"traditional": 50000}}
+    assert check_plan_type_earnings_cap(Decimal("40000"), config, "traditional") == []
+
+
+def test_plan_type_cap_falls_back_to_irs_limit():
+    config = {"irs_401a17_limit": 345000}
+    warnings = check_plan_type_earnings_cap(Decimal("350000"), config, "traditional")
+    assert len(warnings) == 1
+    assert "IRS 401(a)(17)" in warnings[0]
+
+
+def test_plan_type_cap_irs_limit_under_threshold():
+    config = {"irs_401a17_limit": 345000}
+    assert check_plan_type_earnings_cap(Decimal("300000"), config, "traditional") == []
+
+
+def test_plan_type_cap_no_config_returns_empty():
+    assert check_plan_type_earnings_cap(Decimal("999999"), {}, "traditional") == []
+
+
+def test_plan_type_cap_unknown_plan_falls_back_to_irs():
+    config = {
+        "earnings_cap_by_plan_type": {"traditional": 50000},
+        "irs_401a17_limit": 345000,
+    }
+    # "portable" not in cap dict → fall back to IRS limit
+    assert check_plan_type_earnings_cap(Decimal("300000"), config, "portable") == []
+    warnings = check_plan_type_earnings_cap(Decimal("350000"), config, "portable")
+    assert len(warnings) == 1
+    assert "IRS" in warnings[0]
+
+
+def test_plan_type_cap_none_plan_code_uses_irs():
+    config = {"irs_401a17_limit": 100000}
+    warnings = check_plan_type_earnings_cap(Decimal("120000"), config, None)
+    assert len(warnings) == 1

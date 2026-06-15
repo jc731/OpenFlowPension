@@ -75,6 +75,7 @@ _PURCHASE_TYPES_CFG = {
             "interest_rate": 0.065,
             "installment_allowed": False,
             "credit_grant_on": "completion",
+            "restore_cert_date": True,
         },
         "grant_on_approval": {
             "label": "Test: Grant on Approval",
@@ -188,17 +189,39 @@ async def test_quote_ope_includes_employer_rate(session):
     assert result.cost_total == Decimal("12000.00")
 
 
-async def test_quote_refund_repayment_raises_not_implemented(session):
+async def test_quote_refund_repayment_requires_params(session):
     async with session.begin():
         member = await _setup(session)
         req = ServicePurchaseQuoteRequest(
             purchase_type="refund",
             credit_years=Decimal("3.0"),
             period_start=date(1990, 1, 1),
-            period_end=date(1992, 12, 31),
+            period_end=date(2020, 12, 31),
         )
-        with pytest.raises(ValueError, match="refund_repayment.*not yet implemented"):
+        with pytest.raises(ValueError, match="original_refund_amount is required"):
             await svc.quote(member.id, req, session)
+
+
+async def test_quote_refund_repayment_calculates_compound_interest(session):
+    async with session.begin():
+        member = await _setup(session)
+        req = ServicePurchaseQuoteRequest(
+            purchase_type="refund",
+            credit_years=Decimal("5.0"),
+            period_start=date(1990, 1, 1),
+            period_end=date(2010, 1, 1),  # repayment date
+            params={
+                "original_refund_amount": "10000.00",
+                "refund_date": "2000-01-01",  # 10 years of interest
+            },
+        )
+        result = await svc.quote(member.id, req, session, params=req.params)
+
+    # 10000 × (1 + 0.065)^10 ≈ 18771.37
+    assert result.cost_total > Decimal("18000")
+    assert result.cost_total < Decimal("20000")
+    assert result.cost_breakdown["method"] == "refund_repayment"
+    assert result.cost_breakdown["elapsed_days"] > 0
 
 
 async def test_quote_unknown_type_raises(session):
@@ -508,3 +531,153 @@ async def test_service_credit_unknown_entry_type_defaults_to_system(session):
         slots = await _service_credit_by_slot(member.id, date(2025, 1, 1), session)
 
     assert slots.get("system_service_years", Decimal("0")) == Decimal("1.0")
+
+# ── Refund repayment E2E ───────────────────────────────────────────────────────
+
+async def test_refund_repayment_e2e_full_lifecycle(session):
+    """E2E: member with original cert date → refund → claim → calc → pay → credit + cert date restored."""
+    import uuid as _uuid
+    from sqlalchemy import select as sa_select
+
+    async with session.begin():
+        member = await _setup(session)
+        original_cert_date = date(2000, 1, 1)
+        assert member.certification_date == original_cert_date
+
+        # Member took a refund in 2005 — cert date was cleared (simulate a staff wipe)
+        member.certification_date = None
+        member.certification_date_source = "cleared_on_refund"
+        await session.flush()
+
+        # Create refund repayment claim with all required params
+        data = ServicePurchaseClaimCreate(
+            purchase_type="refund",
+            credit_years=Decimal("5.0"),
+            period_start=date(2000, 1, 1),
+            period_end=date(2020, 1, 1),  # repayment date
+            params={
+                "original_refund_amount": "12000.00",
+                "refund_date": "2005-06-15",
+                "cert_date_on_original_hire": "2000-01-01",
+            },
+        )
+        claim = await svc.create_claim(member.id, data, session)
+
+        # Validate the cost calculation
+        assert claim.cost_total > 0
+        assert claim.cost_breakdown["method"] == "refund_repayment"
+        assert Decimal(str(claim.cost_breakdown["original_refund_amount"])) == Decimal("12000.00")
+
+        # Run through full lifecycle to completion
+        await svc.submit_claim(claim, session)
+        approver = _uuid.uuid4()
+        await svc.approve_claim(claim, approver, session)
+
+        payment = ServicePurchasePaymentCreate(
+            amount=Decimal(str(claim.cost_total)),
+            payment_date=date(2020, 2, 1),
+            payment_method="check",
+            reference_number="CHK-REFUND-001",
+        )
+        await svc.record_payment(claim, payment, session)
+
+        # Verify claim completed
+        assert claim.status == "completed"
+
+        # Verify ServiceCreditEntry was written
+        entries = (await session.execute(
+            sa_select(ServiceCreditEntry).where(ServiceCreditEntry.member_id == member.id)
+        )).scalars().all()
+        assert len(entries) == 1
+        assert entries[0].entry_type == "purchased_refund"
+        assert Decimal(str(entries[0].credit_years)) == Decimal("5.0")
+
+        # Verify certification date was restored
+        await session.refresh(member)
+        assert member.certification_date == original_cert_date
+        assert member.certification_date_source == "refund_repayment"
+
+
+async def test_refund_repayment_skips_cert_restore_when_not_configured(session):
+    """If restore_cert_date=False in type config, cert date is left alone."""
+    import uuid as _uuid
+
+    async with session.begin():
+        member = await _setup(session)
+        original_cert = member.certification_date
+
+        # Override config to disable restore
+        from app.models.plan_config import SystemConfiguration
+        override_cfg = dict(_PURCHASE_TYPES_CFG)
+        override_cfg["types"] = dict(override_cfg["types"])
+        override_cfg["types"]["refund"] = dict(override_cfg["types"]["refund"], restore_cert_date=False)
+        session.add(SystemConfiguration(
+            config_key="service_purchase_types",
+            config_value=override_cfg,
+            effective_date=date(2020, 1, 1),
+        ))
+        await session.flush()
+
+        data = ServicePurchaseClaimCreate(
+            purchase_type="refund",
+            credit_years=Decimal("3.0"),
+            period_start=date(2000, 1, 1),
+            period_end=date(2025, 1, 1),
+            params={
+                "original_refund_amount": "8000.00",
+                "refund_date": "2010-01-01",
+                "cert_date_on_original_hire": "1995-01-01",  # would set to 1995 if enabled
+            },
+        )
+        claim = await svc.create_claim(member.id, data, session)
+        await svc.submit_claim(claim, session)
+        await svc.approve_claim(claim, _uuid.uuid4(), session)
+        await svc.record_payment(
+            claim,
+            ServicePurchasePaymentCreate(
+                amount=Decimal(str(claim.cost_total)),
+                payment_date=date(2025, 2, 1),
+                payment_method="check",
+            ),
+            session,
+        )
+
+        await session.refresh(member)
+        # cert date unchanged — restore was disabled
+        assert member.certification_date == original_cert
+
+
+async def test_refund_repayment_no_cert_param_leaves_cert_unchanged(session):
+    """If cert_date_on_original_hire is omitted from params, cert date is not touched."""
+    import uuid as _uuid
+
+    async with session.begin():
+        member = await _setup(session)
+        original_cert = member.certification_date
+
+        data = ServicePurchaseClaimCreate(
+            purchase_type="refund",
+            credit_years=Decimal("2.0"),
+            period_start=date(2000, 1, 1),
+            period_end=date(2020, 1, 1),
+            params={
+                "original_refund_amount": "5000.00",
+                "refund_date": "2008-01-01",
+                # cert_date_on_original_hire intentionally omitted
+            },
+        )
+        claim = await svc.create_claim(member.id, data, session)
+        await svc.submit_claim(claim, session)
+        await svc.approve_claim(claim, _uuid.uuid4(), session)
+        await svc.record_payment(
+            claim,
+            ServicePurchasePaymentCreate(
+                amount=Decimal(str(claim.cost_total)),
+                payment_date=date(2020, 2, 1),
+                payment_method="check",
+            ),
+            session,
+        )
+
+        await session.refresh(member)
+        assert member.certification_date == original_cert

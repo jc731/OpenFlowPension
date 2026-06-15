@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.beneficiary import Beneficiary
     from app.models.contact import MemberContact
     from app.models.employment import EmploymentRecord
+    from app.models.member_name_history import MemberNameHistory
     from app.models.member_status import MemberStatusHistory
     from app.models.payment import BenefitPayment, DeductionOrder, TaxWithholdingElection
     from app.models.plan_config import PlanTier, PlanType
@@ -35,6 +36,7 @@ class Member(TimestampMixin, Base):
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     ssn_encrypted: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     ssn_last_four: Mapped[str] = mapped_column(String(4), nullable=False)
+    ssn_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     gender: Mapped[str | None] = mapped_column(String, nullable=True)
 
     member_status: Mapped[str] = mapped_column(String, nullable=False, default="active", server_default="active")
@@ -64,3 +66,4 @@ class Member(TimestampMixin, Base):
     tax_withholding_elections: Mapped[list[TaxWithholdingElection]] = relationship(back_populates="member")
     status_history: Mapped[list[MemberStatusHistory]] = relationship(back_populates="member", order_by="MemberStatusHistory.effective_date")
     benefit_elections: Mapped[list[MemberBenefitElection]] = relationship(back_populates="member", order_by="MemberBenefitElection.effective_date")
+    name_history: Mapped[list[MemberNameHistory]] = relationship(back_populates="member", order_by="MemberNameHistory.effective_date")

@@ -4,6 +4,30 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
+class MemberNameUpdate(BaseModel):
+    first_name: str
+    middle_name: str | None = None
+    last_name: str
+    suffix: str | None = None
+    effective_date: date
+    reason: str | None = None
+
+
+class MemberNameHistoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    member_id: uuid.UUID
+    first_name: str
+    middle_name: str | None
+    last_name: str
+    suffix: str | None
+    effective_date: date
+    reason: str | None
+    changed_by: uuid.UUID | None
+    created_at: datetime
+
+
 class MemberBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     member_number: str

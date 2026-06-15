@@ -12,6 +12,7 @@ class ServicePurchaseQuoteRequest(BaseModel):
     credit_years: Decimal
     period_start: date
     period_end: date
+    params: dict = {}
 
 
 class ServicePurchaseQuoteResult(BaseModel):
