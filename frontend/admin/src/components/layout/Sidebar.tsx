@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, FileText,
-  Receipt, Settings, KeyRound, ChevronRight, LogOut,
+  Receipt, Settings, KeyRound, ChevronRight, LogOut, Landmark,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
@@ -12,6 +12,7 @@ const lobNav = [
   { to: '/employers', icon: Building2, label: 'Employers' },
   { to: '/retirement', icon: FileText, label: 'Retirement Cases' },
   { to: '/payroll', icon: Receipt, label: 'Payroll Reports' },
+  { to: '/third-party-entities', icon: Landmark, label: 'Third-Party Entities' },
 ]
 
 const adminNav = [

@@ -5,10 +5,6 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// In development, the backend uses a dev-admin bypass when no Authorization header
-// is present. When Keycloak JWT integration ships, add a request interceptor here
-// that injects the Bearer token from the auth context.
-
 export default api
 
 export function setAuthToken(token: string | null) {
@@ -43,14 +39,40 @@ export interface MemberCreate {
   certification_date?: string
 }
 
+export interface MemberAddress {
+  id: string
+  member_id: string
+  address_type: string
+  line1: string
+  line2: string | null
+  city: string
+  state: string
+  zip: string
+  country: string
+  effective_date: string
+  end_date: string | null
+}
+
+export interface MemberContact {
+  id: string
+  member_id: string
+  contact_type: string
+  value: string
+  is_primary: boolean
+  effective_date: string
+  end_date: string | null
+}
+
 // ── Employer types ────────────────────────────────────────────────────────────
 
 export interface Employer {
   id: string
   name: string
   employer_code: string
+  employer_type: string
   active: boolean
   created_at: string
+  updated_at: string
 }
 
 // ── Employment types ──────────────────────────────────────────────────────────
@@ -60,12 +82,16 @@ export interface EmploymentRecord {
   member_id: string
   employer_id: string
   employment_type: string
-  start_date: string
+  position_title: string | null
+  department: string | null
+  hire_date: string
   termination_date: string | null
+  termination_reason: string | null
   percent_time: number
+  is_primary: boolean
+  created_at: string
+  updated_at: string
 }
-
-// ── Salary types ──────────────────────────────────────────────────────────────
 
 export interface SalaryHistory {
   id: string
@@ -73,6 +99,203 @@ export interface SalaryHistory {
   annual_salary: string
   effective_date: string
   end_date: string | null
+}
+
+// ── Beneficiary types ─────────────────────────────────────────────────────────
+
+export interface Beneficiary {
+  id: string
+  member_id: string
+  beneficiary_type: string
+  relationship: string
+  is_primary: boolean
+  first_name: string | null
+  last_name: string | null
+  date_of_birth: string | null
+  ssn_last_four: string | null
+  org_name: string | null
+  linked_member_id: string | null
+  share_percent: number | null
+  effective_date: string
+  end_date: string | null
+}
+
+export interface BeneficiaryBankAccount {
+  id: string
+  beneficiary_id: string
+  bank_name: string
+  routing_number: string
+  account_last_four: string
+  account_type: string
+  is_primary: boolean
+  effective_date: string
+  end_date: string | null
+}
+
+// ── Payment types ─────────────────────────────────────────────────────────────
+
+export interface PaymentDeduction {
+  id: string
+  payment_id: string
+  deduction_order_id: string | null
+  deduction_type: string
+  deduction_code: string | null
+  amount: string
+  is_pretax: boolean
+  note: string | null
+  created_at: string
+}
+
+export interface Payment {
+  id: string
+  member_id: string
+  bank_account_id: string | null
+  period_start: string
+  period_end: string
+  payment_date: string
+  gross_amount: string
+  net_amount: string
+  payment_type: string
+  status: string
+  payment_method: string
+  check_number: string | null
+  issued_at: string | null
+  note: string | null
+  created_at: string
+  deductions: PaymentDeduction[]
+}
+
+// ── Service purchase types ────────────────────────────────────────────────────
+
+export interface ServicePurchasePayment {
+  id: string
+  claim_id: string
+  amount: string
+  payment_date: string
+  created_at: string
+}
+
+export interface ServicePurchaseClaim {
+  id: string
+  member_id: string
+  purchase_type: string
+  status: string
+  credit_entry_type: string
+  credit_years: string
+  period_start: string
+  period_end: string
+  cost_total: string
+  cost_paid: string
+  cost_breakdown: Record<string, unknown>
+  installment_allowed: boolean
+  credit_grant_on: string
+  approved_at: string | null
+  approved_by: string | null
+  completed_at: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  params: Record<string, unknown>
+  notes: string | null
+  created_at: string
+  payments: ServicePurchasePayment[]
+}
+
+// ── Document types ────────────────────────────────────────────────────────────
+
+export interface DocumentTemplate {
+  id: string
+  slug: string
+  display_name: string
+  description: string | null
+  active: boolean
+}
+
+export interface GeneratedDocument {
+  id: string
+  template_id: string
+  member_id: string | null
+  generated_by: string | null
+  params: Record<string, unknown>
+  filename: string
+  status: string
+  created_at: string
+}
+
+// ── Third-party entity types ──────────────────────────────────────────────────
+
+export interface ThirdPartyEntity {
+  id: string
+  name: string
+  entity_type: string
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state: string | null
+  zip_code: string | null
+  phone: string | null
+  email: string | null
+  ein: string | null
+  bank_routing_number: string | null
+  bank_account_last_four: string | null
+}
+
+// ── Billing types ─────────────────────────────────────────────────────────────
+
+export interface InvoicePayment {
+  id: string
+  invoice_id: string
+  amount: number
+  payment_date: string
+  payment_method: string
+  note: string | null
+  created_at: string
+}
+
+export interface Invoice {
+  id: string
+  employer_id: string
+  invoice_type: string
+  status: string
+  period_start: string | null
+  period_end: string | null
+  amount_due: number
+  amount_paid: number
+  interest_accrued: number
+  due_date: string
+  line_items: unknown[]
+  source_report_ids: unknown[]
+  note: string | null
+  created_by: string | null
+  issued_at: string | null
+  paid_at: string | null
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+  payments: InvoicePayment[]
+  created_at: string
+}
+
+export interface ContributionRate {
+  id: string
+  employee_rate: number
+  employer_rate: number
+  effective_date: string
+  end_date: string | null
+  employer_id: string | null
+  employment_type: string | null
+  note: string | null
+}
+
+// ── System config types ───────────────────────────────────────────────────────
+
+export interface SystemConfigEntry {
+  id: string
+  config_key: string
+  config_value: unknown
+  effective_date: string
+  superseded_date: string | null
+  note: string | null
+  set_at: string
 }
 
 // ── Retirement case types ─────────────────────────────────────────────────────
@@ -114,36 +337,6 @@ export interface BenefitEstimate {
   maximum_benefit_cap: { percentage: string; capped: boolean }
 }
 
-// ── API functions ─────────────────────────────────────────────────────────────
-
-export const membersApi = {
-  list: (params?: { status?: string; search?: string; limit?: number; offset?: number }) =>
-    api.get<Member[]>('/members/', { params }),
-  get: (id: string) => api.get<Member>(`/members/${id}`),
-  create: (data: MemberCreate) => api.post<Member>('/members/', data),
-  estimate: (id: string, retirementDate: string) =>
-    api.get<BenefitEstimate>(`/members/${id}/benefit-estimate`, {
-      params: { retirement_date: retirementDate },
-    }),
-  retirementCases: (id: string) =>
-    api.get<RetirementCase[]>(`/members/${id}/retirement-cases`),
-}
-
-export const employersApi = {
-  list: () => api.get<Employer[]>('/employers/'),
-  get: (id: string) => api.get<Employer>(`/employers/${id}`),
-}
-
-export const retirementApi = {
-  list: () => api.get<RetirementCase[]>('/retirement-cases'),
-  get: (id: string) => api.get<RetirementCase>(`/retirement-cases/${id}`),
-  approve: (id: string) => api.post(`/retirement-cases/${id}/approve`),
-  activate: (id: string, firstPaymentDate: string) =>
-    api.post(`/retirement-cases/${id}/activate`, { first_payment_date: firstPaymentDate }),
-  cancel: (id: string, reason?: string) =>
-    api.post(`/retirement-cases/${id}/cancel`, { cancel_reason: reason }),
-}
-
 // ── Payroll types ─────────────────────────────────────────────────────────────
 
 export interface PayrollReportRow {
@@ -178,6 +371,51 @@ export interface PayrollReport {
   rows?: PayrollReportRow[]
 }
 
+// ── API functions ─────────────────────────────────────────────────────────────
+
+export const membersApi = {
+  list: (params?: { status?: string; q?: string; employer_id?: string; limit?: number; offset?: number }) =>
+    api.get<Member[]>('/members/', { params }),
+  get: (id: string) => api.get<Member>(`/members/${id}`),
+  create: (data: MemberCreate) => api.post<Member>('/members/', data),
+  estimate: (id: string, retirementDate: string) =>
+    api.get<BenefitEstimate>(`/members/${id}/benefit-estimate`, {
+      params: { retirement_date: retirementDate },
+    }),
+  retirementCases: (id: string) =>
+    api.get<RetirementCase[]>(`/members/${id}/retirement-cases`),
+  employment: (id: string) =>
+    api.get<EmploymentRecord[]>(`/members/${id}/employment/`),
+  addresses: (id: string) =>
+    api.get<MemberAddress[]>(`/members/${id}/addresses`),
+  contacts: (id: string) =>
+    api.get<MemberContact[]>(`/members/${id}/contacts`),
+  beneficiaries: (id: string, activeOnly = false) =>
+    api.get<Beneficiary[]>(`/members/${id}/beneficiaries`, { params: { active_only: activeOnly } }),
+  payments: (id: string) =>
+    api.get<Payment[]>(`/members/${id}/payments`),
+  servicePurchaseClaims: (id: string) =>
+    api.get<ServicePurchaseClaim[]>(`/members/${id}/service-purchase/claims`),
+  documents: (id: string) =>
+    api.get<GeneratedDocument[]>(`/members/${id}/documents`),
+}
+
+export const employersApi = {
+  list: () => api.get<Employer[]>('/employers/'),
+  get: (id: string) => api.get<Employer>(`/employers/${id}`),
+  invoices: (id: string) => api.get<Invoice[]>(`/employers/${id}/billing/invoices`),
+}
+
+export const retirementApi = {
+  list: () => api.get<RetirementCase[]>('/retirement-cases'),
+  get: (id: string) => api.get<RetirementCase>(`/retirement-cases/${id}`),
+  approve: (id: string) => api.post(`/retirement-cases/${id}/approve`),
+  activate: (id: string, firstPaymentDate: string) =>
+    api.post(`/retirement-cases/${id}/activate`, { first_payment_date: firstPaymentDate }),
+  cancel: (id: string, reason?: string) =>
+    api.post(`/retirement-cases/${id}/cancel`, { cancel_reason: reason }),
+}
+
 export const payrollApi = {
   list: (params?: { employer_id?: string; limit?: number }) =>
     api.get<PayrollReport[]>('/payroll-reports', { params }),
@@ -201,4 +439,28 @@ export const apiKeysApi = {
     api.post<{ key: ApiKey; plaintext_key: string }>('/api-keys', data),
   revoke: (id: string) => api.post(`/api-keys/${id}/revoke`),
   rotate: (id: string) => api.post<{ key: ApiKey; plaintext_key: string }>(`/api-keys/${id}/rotate`),
+}
+
+export const documentsApi = {
+  templates: () => api.get<DocumentTemplate[]>('/document-templates'),
+  generate: (slug: string, memberId: string, params?: Record<string, unknown>) =>
+    api.post<GeneratedDocument>('/documents/generate', { slug, member_id: memberId, params: params ?? {} }),
+  downloadUrl: (docId: string) => `/api/v1/documents/${docId}/download`,
+}
+
+export const thirdPartyEntitiesApi = {
+  list: (activeOnly = true) =>
+    api.get<ThirdPartyEntity[]>('/third-party-entities', { params: { active_only: activeOnly } }),
+  get: (id: string) => api.get<ThirdPartyEntity>(`/third-party-entities/${id}`),
+}
+
+export const billingApi = {
+  rates: (employerId?: string) =>
+    api.get<ContributionRate[]>('/billing/rates', { params: employerId ? { employer_id: employerId } : undefined }),
+  invoices: (employerId: string) =>
+    api.get<Invoice[]>(`/employers/${employerId}/billing/invoices`),
+}
+
+export const systemConfigApi = {
+  list: () => api.get<SystemConfigEntry[]>('/system-configurations'),
 }

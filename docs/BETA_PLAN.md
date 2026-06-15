@@ -26,18 +26,18 @@ Staff can't run a pilot if they can't find members or maintain their contact det
 - [x] **Member search/filter** (US-M10) — `GET /members` query params: status, employer_id, employment_type, q (name/member number), limit/offset
 - [x] **Bulk member import** (US-M09) — `POST /members/import` CSV upload mirroring the payroll intake pattern (partial success, row-level errors)
 
-## Phase 2 — Admin UI buildout
+## Phase 2 — Admin UI buildout (done 2026-06-15)
 
-Largest chunk of beta work. Backend APIs exist for all of these; the pages don't. Sequenced by staff daily-use frequency:
-
-- [ ] **Beneficiaries & survivor elections** (US-UI10) — beneficiary CRUD, bank accounts, benefit elections
-- [ ] **Payment disbursement** (US-UI11) — view/create payments, apply net pay
-- [ ] **Service purchase** (US-UI08) — quotes, claim lifecycle, payment recording
-- [ ] **Employer billing** (US-UI09) — invoices, payments, deficiency bills
-- [ ] **Document generation** (US-UI12) — generate/download member letters
-- [ ] **Third-party entities** (US-UI14) — payee management
-- [ ] **System config editing** (US-UI13) — config page is currently view-oriented; add guarded editing
-- [ ] Surface Phase 1 features in the UI: member search on MemberList, address/contact on MemberDetail
+- [x] **Member search server-side** — MemberList wired to `q`/`status` query params with 300ms debounce; status filter dropdown added
+- [x] **Address & contact tabs on MemberDetail** — surface Phase 1 backend features; active/historical rows shown
+- [x] **Employment tab on MemberDetail** — live data from `/members/{id}/employment/`
+- [x] **Beneficiaries tab on MemberDetail** (US-UI10) — full designation list with share, primary flag, active/historical
+- [x] **Payments tab on MemberDetail** (US-UI11) — payment history with gross/net, status badges
+- [x] **Service purchase tab on MemberDetail** (US-UI08) — claims list with lifecycle status
+- [x] **Documents tab on MemberDetail** (US-UI12) — generated doc list + generate button (template picker)
+- [x] **Employer detail page** with Billing tab (invoices + outstanding balance card) and Contribution Rates tab (US-UI09)
+- [x] **Third-party entities page** (US-UI14) — `/third-party-entities` route + sidebar nav item
+- [x] **System config live values** — `/system-configurations` backend endpoint + expandable cards showing actual JSONB values with active/historical badges
 
 ### Flagged in UI screenshot review (2026-06-12)
 

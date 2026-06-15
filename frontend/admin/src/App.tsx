@@ -7,11 +7,13 @@ import Dashboard from '@/pages/Dashboard'
 import MemberList from '@/pages/members/MemberList'
 import MemberDetail from '@/pages/members/MemberDetail'
 import EmployerList from '@/pages/employers/EmployerList'
+import EmployerDetail from '@/pages/employers/EmployerDetail'
 import RetirementCaseList from '@/pages/retirement/RetirementCaseList'
 import PayrollList from '@/pages/payroll/PayrollList'
 import PayrollDetail from '@/pages/payroll/PayrollDetail'
 import SystemConfig from '@/pages/config/SystemConfig'
 import ApiKeys from '@/pages/config/ApiKeys'
+import ThirdPartyEntityList from '@/pages/third-party-entities/ThirdPartyEntityList'
 import { setAuthToken } from '@/lib/api'
 
 const AUTH_ENABLED = !!import.meta.env.VITE_KEYCLOAK_URL
@@ -28,9 +30,11 @@ const mainRoutes = (
     <Route path="/members" element={<MemberList />} />
     <Route path="/members/:id" element={<MemberDetail />} />
     <Route path="/employers" element={<EmployerList />} />
+    <Route path="/employers/:id" element={<EmployerDetail />} />
     <Route path="/retirement" element={<RetirementCaseList />} />
     <Route path="/payroll" element={<PayrollList />} />
     <Route path="/payroll/:id" element={<PayrollDetail />} />
+    <Route path="/third-party-entities" element={<ThirdPartyEntityList />} />
     <Route path="/config" element={<SystemConfig />} />
     <Route path="/api-keys" element={<ApiKeys />} />
   </>
