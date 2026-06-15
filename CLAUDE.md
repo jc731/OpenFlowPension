@@ -105,10 +105,11 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | API keys | `app/services/api_key_service.py` | `ofp_` prefix; SHA-256 stored; plaintext returned once |
 | Beneficiary mgmt | `app/api/v1/routers/beneficiaries.py` | `linked_member_id` bridge; bank accounts for survivor ACH |
 | Config service | `app/services/config_service.py` | All fund rules route through `get_config()` |
-| Admin frontend | `frontend/admin/` | `pnpm dev` → :5173; proxies `/api/*` to :8000 |
+| Admin frontend | `frontend/admin/` | `pnpm dev` → :5173; proxies `/api/v1` to :8000; 11 pages across members/employers/payroll/retirement/config |
 | Document generation | `app/services/document_*.py` | Declarative context spec; WeasyPrint PDF; Option A escape hatch via `EXPLICIT_ASSEMBLERS` |
 | Service purchase | `app/services/service_purchase_service.py` | Claims lifecycle; 4 types (military/ope/prior_service/refund); installment payments; config-driven credit routing |
 | Employer billing | `app/services/billing_service.py` | Contribution rates (specificity hierarchy); deficiency + supplemental invoices; rate variance warnings in payroll |
+| System config API | `app/api/v1/routers/system_config.py` | Read-only `GET /system-configurations`; all rows ordered by key + effective_date; `admin` scope |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
 **Backlog items:** `docs/BACKLOG.md`  

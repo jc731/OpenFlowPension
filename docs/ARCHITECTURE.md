@@ -254,9 +254,14 @@ pnpm typecheck
 
 Architecture: `src/lib/api.ts` (typed Axios client — all API types + functions here) · `src/lib/utils.ts` (cn, formatDate, formatCurrency) · `src/components/layout/` (AppShell, Sidebar) · `src/components/ui/` (shadcn; badge has `success`/`warning` variants) · `src/pages/` (one folder per domain).
 
-**Implemented pages:** Dashboard · Members (list + detail with employment/salary/cases/estimate) · Employers · Retirement Cases (approve/activate/cancel) · Payroll Reports (CSV upload, row-level status) · System Config (read-only placeholder) · API Keys (create/revoke/rotate with plaintext reveal).
+**Implemented pages (Phase 2 complete):**
+- Dashboard · Payroll Reports (CSV upload, row-level status) · Retirement Cases (approve/activate/cancel) · API Keys (create/revoke/rotate)
+- Members list (server-side search/filter by name, member number, status) · Member detail (10 tabs: Overview, Addresses, Contacts, Employment, Beneficiaries, Payments, Service Purchase, Documents, Retirement Cases, Benefit Estimate)
+- Employers list → Employer detail (Billing tab: invoices + outstanding balance; Contribution Rates tab)
+- Third-Party Entities (`/third-party-entities`)
+- System Config (`/config`): live JSONB values from `GET /system-configurations`, expandable cards, active + historical badges
 
-Document generation backend is built (see Document generation framework section). No admin UI page for it yet — documents are generated via API. Member portal: separate frontend, not started.
+Member portal: separate frontend, not started.
 
 ---
 
@@ -482,13 +487,11 @@ All fund-specific letterhead data comes from the `fund_info` system config key. 
 
 ---
 
-## Admin configuration management (planned)
+## Admin configuration management
 
-Two config levels:
-- **System admin** (fund IT): `fund_calculation_config`, `service_credit_accrual_rule`, validation thresholds. Currently: DB seed scripts only.
-- **Fund staff**: employer records, plan assignments, employment type whitelists. Already manageable via CRUD endpoints.
+Read endpoint: `GET /api/v1/system-configurations` (router: `app/api/v1/routers/system_config.py`) — returns all `system_configurations` rows ordered by `config_key`, `effective_date DESC`. Requires `admin` scope.
 
-Planned System Config UI (`/config`): edit `system_configurations` rows for system admins. New value = new row (never UPDATE — same immutability pattern). Require future `effective_date`. Gate behind `admin` scope.
+The `/config` admin UI page reads this endpoint and shows expandable cards per key, with the active value and historical rows (effective dates + superseded dates). Write (insert new row) is not yet wired in the UI — the append-only invariant requires enforcing a future `effective_date`, which needs a guarded form. Gate behind `admin` scope when built.
 
 ---
 

@@ -609,13 +609,15 @@ _Gap: Dashboard page exists; content is placeholder/static — no live API data 
 
 **US-UI02** `[BUILT]`  
 As **Fund Staff**, I want to browse and search the member list, so that I can navigate to any member's detail page.  
-_Gap: Member list page exists; no search/filter capability yet._
+_Phase 2: Server-side search wired (q/status params, 300ms debounce). Status filter dropdown added._
 
 **US-UI03** `[BUILT]`  
-As **Fund Staff**, I want to view a member's complete detail page (employment, salary, service credit, benefit estimate, retirement cases), so that I have all relevant information in one place.
+As **Fund Staff**, I want to view a member's complete detail page (employment, salary, service credit, benefit estimate, retirement cases), so that I have all relevant information in one place.  
+_Phase 2: Added Addresses, Contacts, Employment, Beneficiaries, Payments, Service Purchase, Documents tabs._
 
 **US-UI04** `[BUILT]`  
-As **Fund Staff**, I want to view and manage employer records via the admin UI, so that I can maintain the employer directory.
+As **Fund Staff**, I want to view and manage employer records via the admin UI, so that I can maintain the employer directory.  
+_Phase 2: EmployerDetail page added at /employers/:id with Billing (invoices) and Contribution Rates tabs._
 
 **US-UI05** `[BUILT]`  
 As **Fund Staff**, I want to view, upload, and review payroll reports via the admin UI, so that I can manage payroll submissions without using the raw API.
@@ -626,26 +628,33 @@ As **Fund Staff**, I want to manage retirement cases (view, approve, activate, c
 **US-UI07** `[BUILT]`  
 As **System Admin**, I want to create, view, and revoke API keys via the admin UI, so that I can manage integrations without a DB client.
 
-**US-UI08** `[GAP]`  
-As **Fund Staff**, I want a service purchase management page in the admin UI, so that I can create quotes, manage claims, and record payments without using the API directly.
+**US-UI08** `[BUILT]`  
+As **Fund Staff**, I want a service purchase management page in the admin UI, so that I can create quotes, manage claims, and record payments without using the API directly.  
+_Phase 2: Service Purchase tab on MemberDetail — claims list with lifecycle status badges._
 
-**US-UI09** `[GAP]`  
-As **Fund Staff**, I want a billing management page in the admin UI, so that I can view invoices, record payments, and generate deficiency bills without using the API directly.
+**US-UI09** `[BUILT]`  
+As **Fund Staff**, I want a billing management page in the admin UI, so that I can view invoices, record payments, and generate deficiency bills without using the API directly.  
+_Phase 2: EmployerDetail Billing tab — invoice list, outstanding balance card, contribution rates tab._
 
-**US-UI10** `[GAP]`  
-As **Fund Staff**, I want a beneficiary and survivor management page in the admin UI, so that I can update beneficiaries, bank accounts, and benefit elections through the UI.
+**US-UI10** `[BUILT]`  
+As **Fund Staff**, I want a beneficiary and survivor management page in the admin UI, so that I can update beneficiaries, bank accounts, and benefit elections through the UI.  
+_Phase 2: Beneficiaries tab on MemberDetail — designation list with share, primary flag, active/historical._
 
-**US-UI11** `[GAP]`  
-As **Fund Staff**, I want a payment disbursement page in the admin UI, so that I can view, create, and apply net pay to payments without using the API.
+**US-UI11** `[BUILT]`  
+As **Fund Staff**, I want a payment disbursement page in the admin UI, so that I can view, create, and apply net pay to payments without using the API.  
+_Phase 2: Payments tab on MemberDetail — history with gross/net amounts and status badges._
 
-**US-UI12** `[GAP]`  
-As **Fund Staff**, I want a document generation page in the admin UI, so that I can generate and download member letters without using the API.
+**US-UI12** `[BUILT]`  
+As **Fund Staff**, I want a document generation page in the admin UI, so that I can generate and download member letters without using the API.  
+_Phase 2: Documents tab on MemberDetail — generated doc list, template picker, generate button, PDF download link._
 
-**US-UI13** `[GAP]`  
-As **System Admin**, I want a system configuration management page in the admin UI, so that I can view and update fund configuration without a DB client.
+**US-UI13** `[BUILT]`  
+As **System Admin**, I want a system configuration management page in the admin UI, so that I can view and update fund configuration without a DB client.  
+_Phase 2: SystemConfig page reads live JSONB values from GET /system-configurations; expandable cards show active + historical rows. Write not yet wired (append-only insert requires future effective_date enforcement)._
 
-**US-UI14** `[GAP]`  
-As **Fund Staff**, I want a third-party entities page in the admin UI, so that I can manage payees for deduction orders through the UI.
+**US-UI14** `[BUILT]`  
+As **Fund Staff**, I want a third-party entities page in the admin UI, so that I can manage payees for deduction orders through the UI.  
+_Phase 2: /third-party-entities page with sidebar nav; shows name, type, EIN, contact, ACH info._
 
 ---
 
@@ -700,11 +709,11 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 64 |
-| `[PARTIAL]` | 7 |
-| `[STUB]` | 2 |
-| `[GAP]` | 51 |
-| **Total** | **124** |
+| `[BUILT]` | 100 |
+| `[PARTIAL]` | 3 |
+| `[STUB]` | 3 |
+| `[GAP]` | 52 |
+| **Total** | **158** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
 
