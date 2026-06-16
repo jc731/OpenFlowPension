@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { membersApi } from '@/lib/api'
-import { formatDate } from '@/lib/utils'
+import { membersApi, planConfigApi } from '@/lib/api'
+import { formatDate, formatStatus } from '@/lib/utils'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
   active: 'success',
@@ -41,7 +41,15 @@ export default function MemberList() {
     }),
   })
 
+  const { data: planConfig } = useQuery({
+    queryKey: ['plan-config'],
+    queryFn: () => planConfigApi.get(),
+    staleTime: Infinity,
+  })
+
   const members = data?.data ?? []
+  const tierById = Object.fromEntries((planConfig?.data.tiers ?? []).map(t => [t.id, t.tier_label]))
+  const typeById = Object.fromEntries((planConfig?.data.types ?? []).map(t => [t.id, t.plan_label]))
 
   return (
     <div className="p-6 space-y-4">
@@ -106,12 +114,14 @@ export default function MemberList() {
                 <TableCell className="font-mono text-xs">{m.member_number}</TableCell>
                 <TableCell>
                   <Badge variant={statusVariant[m.member_status] ?? 'secondary'}>
-                    {m.member_status.replace('_', ' ')}
+                    {formatStatus(m.member_status)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm">{formatDate(m.certification_date)}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {m.plan_choice_locked ? 'Locked' : 'Open'}
+                  {m.plan_tier_id ? (
+                    <span>{tierById[m.plan_tier_id] ?? '—'} · {m.plan_type_id ? (typeById[m.plan_type_id] ?? '—') : '—'}</span>
+                  ) : '—'}
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" asChild>

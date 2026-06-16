@@ -2,11 +2,13 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import Principal, require_scope
 from app.database import get_session
+from app.models.plan_config import PlanTier, PlanType
 from app.schemas.address import MemberAddressCreate, MemberAddressRead
 from app.schemas.benefit import BenefitCalculationResult, BenefitOptionRequest
 from app.schemas.contact import MemberContactCreate, MemberContactRead
@@ -14,6 +16,33 @@ from app.schemas.member import MemberCreate, MemberImportResult, MemberNameHisto
 from app.services import benefit_estimate_service, member_service, plan_choice_service
 
 router = APIRouter(prefix="/members", tags=["members"])
+
+
+class PlanTierRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    tier_code: str
+    tier_label: str
+
+
+class PlanTypeRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    plan_code: str
+    plan_label: str
+
+
+class PlanConfigResponse(BaseModel):
+    tiers: list[PlanTierRead]
+    types: list[PlanTypeRead]
+
+
+@router.get("/plan-config", response_model=PlanConfigResponse,
+            dependencies=[Depends(require_scope("member:read"))])
+async def get_plan_config(session: AsyncSession = Depends(get_session)):
+    tiers = (await session.execute(select(PlanTier).order_by(PlanTier.tier_code))).scalars().all()
+    types = (await session.execute(select(PlanType).order_by(PlanType.plan_code))).scalars().all()
+    return PlanConfigResponse(tiers=list(tiers), types=list(types))
 
 
 class PlanChoiceCreate(BaseModel):

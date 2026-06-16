@@ -465,6 +465,29 @@ export const billingApi = {
     api.get<Invoice[]>(`/employers/${employerId}/billing/invoices`),
 }
 
+// ── Plan config types ─────────────────────────────────────────────────────────
+
+export interface PlanTierRead {
+  id: string
+  tier_code: string
+  tier_label: string
+}
+
+export interface PlanTypeRead {
+  id: string
+  plan_code: string
+  plan_label: string
+}
+
+export interface PlanConfigResponse {
+  tiers: PlanTierRead[]
+  types: PlanTypeRead[]
+}
+
+export const planConfigApi = {
+  get: () => api.get<PlanConfigResponse>('/members/plan-config'),
+}
+
 export const systemConfigApi = {
   list: () => api.get<SystemConfigEntry[]>('/system-configurations'),
 }

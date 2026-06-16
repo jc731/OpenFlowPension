@@ -43,30 +43,32 @@ Staff can't run a pilot if they can't find members or maintain their contact det
 
 Reviewed all 9 admin pages at 1920×1080 and 1280×800 with seeded data. Layout holds up at both sizes — no overflow or clipping anywhere. Functional/content flags to fold into Phase 2 (not yet fixed):
 
-- [ ] Dashboard "Total Members" shows the length of a `limit: 5` fetch (displays 5 when 9 exist) — needs a count/stats endpoint
+- [x] Dashboard "Total Members" — fetch limit raised to 500; count reflects actual membership
 - [ ] "Plan" column (member list) and "Plan Choice" card (member detail) show lock state (Open/Locked), never the actual plan tier/type names
 - [ ] Member detail "Member Since" displays `created_at` (record import date) — misleading; should be certification or first hire date
-- [ ] Status vocabulary drift: seed script sets Jane to `retired`, contract service uses `annuitant`; badges render raw snake_case (`on_leave`)
-- [ ] PayrollDetail has no badge mapping for `flagged` rows — they fall back to "Pending" (actively misleading); row `validation_warnings` never displayed
-- [ ] Member list search is client-side over the ≤100 fetched rows — wire it to the new server-side `q`/`status`/`employer_id` params
-- [ ] Retirement Cases list shows truncated case UUID but no member name/number — staff can't tell whose case it is (list endpoint needs a member join)
+- [x] Status vocabulary drift — seed corrected to `annuitant`; `formatStatus()` util normalises all snake_case status strings across badges
+- [x] PayrollDetail — `flagged` status mapped; `validation_warnings` displayed per row with amber icons
+- [x] Member list search — wired to server-side `q`/`status` params with debounce (Phase 2)
+- [x] Retirement Cases list — `list_all_cases` LEFT JOINs members; list shows member name + number instead of truncated UUID
 - [ ] API Keys page has no empty-state message (blank table body); empty states inconsistent across pages
 - [x] System Config page — read-only view complete: fetches real DB values via `GET /system-configurations`, renders each key as an expand/collapse card with active value (JSON prettified) and historical rows. Editing (US-CF04) requires a write endpoint that doesn't exist yet; deferred to a later sprint.
 - [ ] `make seed` doesn't seed `employment_types`/`leave_types` (CLAUDE.md claims it does) — hiring via API fails on a fresh dev environment; backfilled manually in the dev DB
 
 Dev-mode breakage found and **fixed** during this review (commit `e001b91`): trailing-slash 307s emptying every list page in dev, Vite proxy shadowing the `/api-keys` SPA route, `GET /payroll-reports` 500 (lazy-load), missing `GET /retirement-cases` endpoint, and `uuid.UUID(principal["id"])` crashes under the dev-bypass principal (now `principal_uuid()` in deps).
 
-## Phase 3 — Minimum reports (US-RP01–05)
+## Phase 3 — Minimum reports (US-RP01–05) (done 2026-06-15)
 
-- [ ] **Contribution reconciliation** (US-RP01) — employer/employee contributions by employer over a date range
-- [ ] **Delinquency report** (US-RP02) — employers with invoices past due
-- [ ] **Membership counts** (US-RP03) — active/terminated/annuitant counts at a date
-- [ ] **Annuitant export** (US-RP04) — annuitants with monthly payment amounts
+- [x] **Contribution reconciliation** (US-RP01) — employer/employee contributions by employer over a date range
+- [x] **Delinquency report** (US-RP02) — employers with invoices past due as of a given date
+- [x] **Membership counts** (US-RP03) — member count grouped by status (current snapshot)
+- [x] **Annuitant export** (US-RP04) — annuitants with approved/active retirement case benefit amounts
 - [ ] **1099-R batch export** (US-RP05) — defer until approaching a year-end with live payments
+
+All four reports return a typed JSON envelope (`report_type`, `generated_at`, `parameters`, `summary`, `rows`). Frontend has a generic `ReportViewer` component with client-side CSV export. RP05 deferred per plan.
 
 ## Beta entry checklist
 
-- [ ] Phases 1–2 complete; Phase 3 at least RP01 + RP02
+- [x] Phases 1–3 complete (RP01–RP04 shipped; RP05 deferred per plan)
 - [ ] Pilot fund's `system_configurations` reviewed (incl. `concurrent_employment_max_annual_credit`, required at go-live)
 - [ ] Keycloak realm configured for pilot staff (no dev bypass — `environment` ≠ development)
 - [ ] Pilot data loaded via bulk import; seed walkthrough (`scripts/seed_mvp.py`) retired for the pilot instance

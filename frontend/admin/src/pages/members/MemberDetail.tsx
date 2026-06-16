@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { membersApi, documentsApi } from '@/lib/api'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { membersApi, documentsApi, planConfigApi } from '@/lib/api'
+import { formatDate, formatCurrency, formatStatus } from '@/lib/utils'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
   active: 'success', terminated: 'secondary', annuitant: 'default',
@@ -36,6 +36,15 @@ export default function MemberDetail() {
     enabled: !!id,
   })
 
+  const { data: planConfig } = useQuery({
+    queryKey: ['plan-config'],
+    queryFn: () => planConfigApi.get(),
+    staleTime: Infinity,
+  })
+
+  const tierById = Object.fromEntries((planConfig?.data.tiers ?? []).map(t => [t.id, t.tier_label]))
+  const typeById = Object.fromEntries((planConfig?.data.types ?? []).map(t => [t.id, t.plan_label]))
+
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>
   if (!member) return <div className="p-6 text-muted-foreground">Member not found.</div>
 
@@ -52,7 +61,7 @@ export default function MemberDetail() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold">{m.first_name} {m.last_name}</h1>
             <Badge variant={statusVariant[m.member_status] ?? 'secondary'}>
-              {m.member_status.replace('_', ' ')}
+              {formatStatus(m.member_status)}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground font-mono">{m.member_number}</p>
@@ -75,8 +84,11 @@ export default function MemberDetail() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <p className="text-xs text-muted-foreground">Plan Choice</p>
-            <p className="font-medium mt-1">{m.plan_choice_locked ? 'Locked' : 'Open window'}</p>
+            <p className="text-xs text-muted-foreground">Plan</p>
+            <p className="font-medium mt-1">
+              {m.plan_tier_id ? tierById[m.plan_tier_id] : '—'} · {m.plan_type_id ? typeById[m.plan_type_id] : '—'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">{m.plan_choice_locked ? 'Locked' : 'Open window'}</p>
           </CardContent>
         </Card>
         <Card>
@@ -109,8 +121,12 @@ export default function MemberDetail() {
             <CardContent className="grid grid-cols-2 gap-4 text-sm">
               <div><p className="text-muted-foreground">Full Name</p><p className="font-medium">{m.first_name} {m.last_name}</p></div>
               <div><p className="text-muted-foreground">Member Number</p><p className="font-mono">{m.member_number}</p></div>
-              <div><p className="text-muted-foreground">Status</p><Badge variant={statusVariant[m.member_status] ?? 'secondary'}>{m.member_status.replace('_', ' ')}</Badge></div>
-              <div><p className="text-muted-foreground">Plan Locked</p><p>{m.plan_choice_locked ? 'Yes' : 'No'}</p></div>
+              <div><p className="text-muted-foreground">Status</p><Badge variant={statusVariant[m.member_status] ?? 'secondary'}>{formatStatus(m.member_status)}</Badge></div>
+              <div>
+                <p className="text-muted-foreground">Plan</p>
+                <p className="font-medium">{m.plan_tier_id ? tierById[m.plan_tier_id] : '—'} · {m.plan_type_id ? typeById[m.plan_type_id] : '—'}</p>
+                <p className="text-xs text-muted-foreground">{m.plan_choice_locked ? 'Locked' : 'Open window'}</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

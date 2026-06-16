@@ -89,6 +89,9 @@ export default function ApiKeys() {
             {isLoading && (
               <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
             )}
+            {!isLoading && !data?.data.length && (
+              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No API keys yet. Create one above.</TableCell></TableRow>
+            )}
             {data?.data.map(k => (
               <TableRow key={k.id}>
                 <TableCell className="font-medium">{k.name}</TableCell>

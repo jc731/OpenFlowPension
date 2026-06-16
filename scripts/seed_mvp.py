@@ -252,6 +252,21 @@ async def seed():
                     superseded_date=None,
                     note="Fund-level payroll validation thresholds; mode=warn flags rows without rejecting",
                 ),
+                # ── Employment and leave type allowlists ──────────────────────
+                dict(
+                    config_key="employment_types",
+                    config_value={"types": ["general_staff", "academic", "police_fire", "other"]},
+                    effective_date=date(2000, 1, 1),
+                    superseded_date=None,
+                    note="Valid employment_type values accepted by contract_service",
+                ),
+                dict(
+                    config_key="leave_types",
+                    config_value={"types": ["medical", "personal", "military", "family", "other"]},
+                    effective_date=date(2000, 1, 1),
+                    superseded_date=None,
+                    note="Valid leave_type values accepted by contract_service",
+                ),
                 # ── Service purchase types ─────────────────────────────────────
                 dict(
                     config_key="service_purchase_types",
