@@ -14,6 +14,11 @@ import PayrollDetail from '@/pages/payroll/PayrollDetail'
 import SystemConfig from '@/pages/config/SystemConfig'
 import ApiKeys from '@/pages/config/ApiKeys'
 import ThirdPartyEntityList from '@/pages/third-party-entities/ThirdPartyEntityList'
+import ReportsIndex from '@/pages/reports/index'
+import ContributionReconciliation from '@/pages/reports/ContributionReconciliation'
+import Delinquency from '@/pages/reports/Delinquency'
+import MembershipCounts from '@/pages/reports/MembershipCounts'
+import AnnuitantExport from '@/pages/reports/AnnuitantExport'
 import { setAuthToken } from '@/lib/api'
 
 const AUTH_ENABLED = !!import.meta.env.VITE_KEYCLOAK_URL
@@ -37,6 +42,11 @@ const mainRoutes = (
     <Route path="/third-party-entities" element={<ThirdPartyEntityList />} />
     <Route path="/config" element={<SystemConfig />} />
     <Route path="/api-keys" element={<ApiKeys />} />
+    <Route path="/reports" element={<ReportsIndex />} />
+    <Route path="/reports/contribution-reconciliation" element={<ContributionReconciliation />} />
+    <Route path="/reports/delinquency" element={<Delinquency />} />
+    <Route path="/reports/membership-counts" element={<MembershipCounts />} />
+    <Route path="/reports/annuitants" element={<AnnuitantExport />} />
   </>
 )
 

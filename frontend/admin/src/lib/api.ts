@@ -464,3 +464,132 @@ export const billingApi = {
 export const systemConfigApi = {
   list: () => api.get<SystemConfigEntry[]>('/system-configurations'),
 }
+
+// ── Report types ──────────────────────────────────────────────────────────────
+
+export interface ContributionReconciliationRow {
+  employer_id: string
+  employer_name: string
+  employer_code: string
+  total_employee_contributions: string
+  total_employer_contributions: string
+  total_contributions: string
+  record_count: number
+}
+
+export interface ContributionReconciliationSummary {
+  total_employee_contributions: string
+  total_employer_contributions: string
+  total_contributions: string
+  employer_count: number
+  record_count: number
+}
+
+export interface ContributionReconciliationReport {
+  report_type: string
+  generated_at: string
+  parameters: Record<string, string | null>
+  summary: ContributionReconciliationSummary
+  rows: ContributionReconciliationRow[]
+}
+
+export interface DelinquencyRow {
+  employer_id: string
+  employer_name: string
+  employer_code: string
+  invoice_id: string
+  invoice_type: string
+  invoice_status: string
+  due_date: string
+  amount_due: string
+  amount_paid: string
+  outstanding: string
+  days_overdue: number
+}
+
+export interface DelinquencySummary {
+  total_outstanding: string
+  invoice_count: number
+  employer_count: number
+}
+
+export interface DelinquencyReport {
+  report_type: string
+  generated_at: string
+  parameters: Record<string, string | null>
+  summary: DelinquencySummary
+  rows: DelinquencyRow[]
+}
+
+export interface MembershipCountRow {
+  status: string
+  count: number
+}
+
+export interface MembershipCountSummary {
+  total_members: number
+  note: string
+}
+
+export interface MembershipCountReport {
+  report_type: string
+  generated_at: string
+  parameters: Record<string, never>
+  summary: MembershipCountSummary
+  rows: MembershipCountRow[]
+}
+
+export interface AnnuitantRow {
+  member_id: string
+  member_number: string
+  first_name: string
+  last_name: string
+  member_status: string
+  retirement_date: string | null
+  benefit_option_type: string | null
+  case_status: string | null
+  final_monthly_annuity: string | null
+  first_payment_date: string | null
+  payments_started: boolean
+}
+
+export interface AnnuitantSummary {
+  total_annuitants: number
+  annuitants_with_approved_case: number
+  total_monthly_outlay: string
+  note: string
+}
+
+export interface AnnuitantReport {
+  report_type: string
+  generated_at: string
+  parameters: Record<string, never>
+  summary: AnnuitantSummary
+  rows: AnnuitantRow[]
+}
+
+export const reportsApi = {
+  contributionReconciliation: (
+    periodStart: string,
+    periodEnd: string,
+    employerId?: string,
+  ) =>
+    api.get<ContributionReconciliationReport>('/reports/contribution-reconciliation', {
+      params: {
+        period_start: periodStart,
+        period_end: periodEnd,
+        ...(employerId ? { employer_id: employerId } : {}),
+      },
+    }),
+
+  delinquency: (asOf?: string) =>
+    api.get<DelinquencyReport>('/reports/delinquency', {
+      params: asOf ? { as_of: asOf } : undefined,
+    }),
+
+  membershipCounts: () =>
+    api.get<MembershipCountReport>('/reports/membership-counts'),
+
+  annuitants: () =>
+    api.get<AnnuitantReport>('/reports/annuitants'),
+}
