@@ -46,6 +46,10 @@ class RetirementCaseRead(BaseModel):
 
     id: uuid.UUID
     member_id: uuid.UUID
+    # Populated only on list-all responses (joined from members table)
+    member_number: str | None = None
+    member_first_name: str | None = None
+    member_last_name: str | None = None
     status: str
     retirement_date: date
     termination_date: date | None
@@ -141,7 +145,17 @@ async def list_all_retirement_cases(
     limit: int = 100,
     session: AsyncSession = Depends(get_session),
 ):
-    return await retirement_service.list_all_cases(session, status=status, limit=limit)
+    rows = await retirement_service.list_all_cases(session, status=status, limit=limit)
+    return [
+        RetirementCaseRead.model_validate(case, from_attributes=True).model_copy(
+            update={
+                "member_number": member_number,
+                "member_first_name": first_name,
+                "member_last_name": last_name,
+            }
+        )
+        for case, member_number, first_name, last_name in rows
+    ]
 
 
 @router.get(

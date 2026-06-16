@@ -435,7 +435,7 @@ async def test_get_case_not_found(session: AsyncSession):
 
 async def test_list_all_cases(session: AsyncSession, draft_case: RetirementCase):
     cases = await retirement_service.list_all_cases(session)
-    assert [c.id for c in cases] == [draft_case.id]
+    assert [case.id for case, *_ in cases] == [draft_case.id]
 
     drafts = await retirement_service.list_all_cases(session, status="draft")
     assert len(drafts) == 1

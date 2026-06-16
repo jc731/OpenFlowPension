@@ -51,7 +51,7 @@ Reviewed all 9 admin pages at 1920×1080 and 1280×800 with seeded data. Layout 
 - [ ] Member list search is client-side over the ≤100 fetched rows — wire it to the new server-side `q`/`status`/`employer_id` params
 - [ ] Retirement Cases list shows truncated case UUID but no member name/number — staff can't tell whose case it is (list endpoint needs a member join)
 - [ ] API Keys page has no empty-state message (blank table body); empty states inconsistent across pages
-- [ ] System Config page is a hardcoded key list with descriptions only — no actual values from the DB, no editing (US-CF04/US-UI13)
+- [x] System Config page — read-only view complete: fetches real DB values via `GET /system-configurations`, renders each key as an expand/collapse card with active value (JSON prettified) and historical rows. Editing (US-CF04) requires a write endpoint that doesn't exist yet; deferred to a later sprint.
 - [ ] `make seed` doesn't seed `employment_types`/`leave_types` (CLAUDE.md claims it does) — hiring via API fails on a fresh dev environment; backfilled manually in the dev DB
 
 Dev-mode breakage found and **fixed** during this review (commit `e001b91`): trailing-slash 307s emptying every list page in dev, Vite proxy shadowing the `/api-keys` SPA route, `GET /payroll-reports` 500 (lazy-load), missing `GET /retirement-cases` endpoint, and `uuid.UUID(principal["id"])` crashes under the dev-bypass principal (now `principal_uuid()` in deps).

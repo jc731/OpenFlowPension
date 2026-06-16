@@ -3,7 +3,7 @@ import { Users, Building2, FileText, KeyRound, TrendingUp, Clock } from 'lucide-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { membersApi, employersApi, retirementApi, apiKeysApi } from '@/lib/api'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, formatStatus } from '@/lib/utils'
 
 function StatCard({ title, value, icon: Icon, sub }: { title: string; value: string | number; icon: React.ElementType; sub?: string }) {
   return (
@@ -28,7 +28,7 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'success' | 'warni
 }
 
 export default function Dashboard() {
-  const members = useQuery({ queryKey: ['members'], queryFn: () => membersApi.list({ limit: 5 }) })
+  const members = useQuery({ queryKey: ['members', 'all'], queryFn: () => membersApi.list({ limit: 500 }) })
   const employers = useQuery({ queryKey: ['employers'], queryFn: () => employersApi.list() })
   const cases = useQuery({ queryKey: ['retirement-cases'], queryFn: () => retirementApi.list() })
   const keys = useQuery({ queryKey: ['api-keys'], queryFn: () => apiKeysApi.list() })
@@ -85,7 +85,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground">{m.member_number}</p>
                 </div>
                 <Badge variant={m.member_status === 'active' ? 'success' : 'secondary'}>
-                  {m.member_status}
+                  {formatStatus(m.member_status)}
                 </Badge>
               </div>
             ))}

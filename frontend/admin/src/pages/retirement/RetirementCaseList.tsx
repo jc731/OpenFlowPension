@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { retirementApi } from '@/lib/api'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, formatStatus } from '@/lib/utils'
 
 const statusVariant: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
   draft: 'secondary', approved: 'warning', active: 'success', cancelled: 'destructive',
@@ -36,7 +36,7 @@ export default function RetirementCaseList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Case ID</TableHead>
+              <TableHead>Member</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Retirement Date</TableHead>
               <TableHead>Option</TableHead>
@@ -54,10 +54,15 @@ export default function RetirementCaseList() {
             )}
             {data?.data.map(c => (
               <TableRow key={c.id}>
-                <TableCell className="font-mono text-xs">{c.id.slice(0, 8)}…</TableCell>
-                <TableCell><Badge variant={statusVariant[c.status]}>{c.status}</Badge></TableCell>
+                <TableCell>
+                  {c.member_first_name
+                    ? <><p className="text-sm font-medium">{c.member_first_name} {c.member_last_name}</p><p className="text-xs text-muted-foreground font-mono">{c.member_number}</p></>
+                    : <span className="font-mono text-xs text-muted-foreground">{c.member_id.slice(0, 8)}…</span>
+                  }
+                </TableCell>
+                <TableCell><Badge variant={statusVariant[c.status]}>{formatStatus(c.status)}</Badge></TableCell>
                 <TableCell>{formatDate(c.retirement_date)}</TableCell>
-                <TableCell className="capitalize text-sm">{c.benefit_option_type.replace(/_/g, ' ')}</TableCell>
+                <TableCell className="text-sm">{formatStatus(c.benefit_option_type)}</TableCell>
                 <TableCell>{c.final_monthly_annuity ? formatCurrency(c.final_monthly_annuity) : '—'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{formatDate(c.created_at)}</TableCell>
                 <TableCell>

@@ -386,7 +386,7 @@ async def seed():
                     "date_of_birth": date(1965, 3, 15),
                     "ssn_encrypted": encrypt_ssn(jane_ssn),
                     "ssn_last_four": jane_ssn[-4:],
-                    "member_status": "retired",
+                    "member_status": "annuitant",
                     "status_date": date(2025, 1, 15),
                     "plan_tier_id": tier1.id,
                     "plan_type_id": traditional.id,

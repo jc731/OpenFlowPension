@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, XCircle, SkipForward, Clock } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, XCircle, SkipForward, Clock, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +13,7 @@ const rowStatusConfig: Record<PayrollReportRow['status'], { label: string; varia
   error:    { label: 'Error',      variant: 'destructive', icon: XCircle },
   skipped:  { label: 'Skipped',    variant: 'secondary',   icon: SkipForward },
   pending:  { label: 'Pending',    variant: 'warning',     icon: Clock },
+  flagged:  { label: 'Flagged',    variant: 'warning',     icon: AlertTriangle },
 }
 
 const reportStatusVariant: Record<string, 'default' | 'secondary' | 'success' | 'warning' | 'destructive'> = {
@@ -117,7 +118,7 @@ export default function PayrollDetail() {
                 <TableHead className="text-right">Employer Contrib</TableHead>
                 <TableHead className="text-right">Days</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Note</TableHead>
+                <TableHead>Notes / Warnings</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -146,8 +147,16 @@ export default function PayrollDetail() {
                         <Icon className="h-3 w-3" />{cfg.label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground max-w-64 truncate">
-                      {row.error_message ?? '—'}
+                    <TableCell className="text-xs max-w-72">
+                      {row.error_message && (
+                        <p className="text-destructive">{row.error_message}</p>
+                      )}
+                      {row.validation_warnings?.map((w, i) => (
+                        <p key={i} className="text-amber-700 flex items-start gap-1">
+                          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />{w}
+                        </p>
+                      ))}
+                      {!row.error_message && !row.validation_warnings?.length && '—'}
                     </TableCell>
                   </TableRow>
                 )

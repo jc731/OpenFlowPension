@@ -278,13 +278,23 @@ async def list_all_cases(
     session: AsyncSession,
     status: str | None = None,
     limit: int = 100,
-) -> list[RetirementCase]:
-    """List cases across all members (admin/LOB work-queue view)."""
-    stmt = select(RetirementCase).order_by(RetirementCase.created_at.desc()).limit(limit)
+) -> list[tuple[RetirementCase, str | None, str | None, str | None]]:
+    """List cases across all members with member identifiers for the work-queue view."""
+    stmt = (
+        select(
+            RetirementCase,
+            Member.member_number,
+            Member.first_name,
+            Member.last_name,
+        )
+        .outerjoin(Member, Member.id == RetirementCase.member_id)
+        .order_by(RetirementCase.created_at.desc())
+        .limit(limit)
+    )
     if status:
         stmt = stmt.where(RetirementCase.status == status)
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    return list(result.tuples().all())
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────────

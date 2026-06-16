@@ -303,6 +303,9 @@ export interface SystemConfigEntry {
 export interface RetirementCase {
   id: string
   member_id: string
+  member_number: string | null
+  member_first_name: string | null
+  member_last_name: string | null
   status: 'draft' | 'approved' | 'active' | 'cancelled'
   retirement_date: string
   benefit_option_type: string
@@ -350,8 +353,9 @@ export interface PayrollReportRow {
   employee_contribution: string
   employer_contribution: string
   days_worked: number
-  status: 'pending' | 'applied' | 'error' | 'skipped'
+  status: 'pending' | 'applied' | 'flagged' | 'error' | 'skipped'
   error_message: string | null
+  validation_warnings: string[] | null
   created_at: string
 }
 

@@ -16,3 +16,8 @@ export function formatCurrency(amount: number | string | null | undefined): stri
   if (amount == null) return '—'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(amount))
 }
+
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return '—'
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
