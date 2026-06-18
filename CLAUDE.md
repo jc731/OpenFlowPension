@@ -121,7 +121,8 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 
 All fund rules stored in `system_configurations` table, looked up via `get_config(key, as_of, session)`.
 
-**Seeded:** `service_credit_accrual_rule` · `employment_types` · `leave_types` · `fund_calculation_config` · `federal_income_tax_withholding` (2025 + 2026 formats differ — see `docs/ARCHITECTURE.md`) · `illinois_income_tax` · `fund_info` · `service_purchase_types` · `payroll_validation_config`  
+**Seeded:** `service_credit_accrual_rule` · `employment_types` · `leave_types` · `federal_income_tax_withholding` (2025 + 2026 formats differ — see `docs/ARCHITECTURE.md`) · `illinois_income_tax` · `fund_info` · `service_purchase_types` · `payroll_validation_config`  
+**Not seeded (falls back to defaults):** `fund_calculation_config` — `load_fund_config()` returns `FundConfig()` SURS defaults if absent; seed a row only to override specific parameters for a non-SURS fund  
 **Required at go-live:** `concurrent_employment_max_annual_credit`
 
 Full key schemas and adding-a-key checklist: `docs/ARCHITECTURE.md#system-configuration-keys`
