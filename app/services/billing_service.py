@@ -377,6 +377,50 @@ async def void_invoice(
     return invoice
 
 
+async def mark_overdue_invoices(
+    session: AsyncSession,
+    as_of: date | None = None,
+) -> int:
+    """Transition all issued invoices past their due_date to overdue. Returns count marked."""
+    effective_date = as_of or date.today()
+    result = await session.execute(
+        select(EmployerInvoice).where(
+            EmployerInvoice.status == "issued",
+            EmployerInvoice.due_date < effective_date,
+        )
+    )
+    invoices = list(result.scalars().all())
+    for inv in invoices:
+        inv.status = "overdue"
+    await session.flush()
+    return len(invoices)
+
+
+async def accrue_interest(
+    invoice: EmployerInvoice,
+    annual_rate_pct: float,
+    session: AsyncSession,
+    as_of: date | None = None,
+) -> EmployerInvoice:
+    """Compute simple daily interest from due_date to as_of and add to interest_accrued."""
+    if invoice.status not in ("overdue", "issued"):
+        raise ValueError(f"Cannot accrue interest on invoice in status '{invoice.status}'")
+    effective_date = as_of or date.today()
+    if effective_date <= invoice.due_date:
+        raise ValueError("as_of must be after the invoice due_date")
+    days_overdue = (effective_date - invoice.due_date).days
+    interest = (
+        Decimal(str(invoice.amount_due))
+        * Decimal(str(annual_rate_pct)) / Decimal("100")
+        * Decimal(str(days_overdue)) / Decimal("365")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    invoice.interest_accrued = float(
+        (Decimal(str(invoice.interest_accrued)) + interest).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    )
+    await session.flush()
+    return invoice
+
+
 # ── Rate management ────────────────────────────────────────────────────────────
 
 async def create_rate(

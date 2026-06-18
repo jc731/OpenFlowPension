@@ -91,17 +91,17 @@ _Tests: test_contract_service.py_
 As **Fund Staff**, I want to record a salary change (new annual salary, effective date), so that benefit calculations use the correct FAE figure.  
 _Tests: test_contract_service.py_
 
-**US-E07** `[PARTIAL]`  
+**US-E07** `[BUILT]`  
 As **Fund Staff**, I want to view the full salary history for a member in reverse-chronological order, so that I can trace FAE inputs.  
-_Gap: SalaryHistory is loaded by benefit_estimate_service internally; no dedicated salary history list endpoint._
+_Tests: test_member_service.py. GET /members/{id}/employment/salary-history returns all SalaryHistory across all employment records, ordered by effective_date DESC._
 
-**US-E08** `[GAP]`  
+**US-E08** `[BUILT]`  
 As **Fund Staff**, I want the system to warn me when a member's combined service credit from concurrent employments exceeds the plan maximum in a year, so that over-crediting is prevented.  
-_Gap: `concurrent_employment_max_annual_credit` config key exists but is not enforced at payroll ingestion. Required at go-live._
+_Tests: test_payroll_service.py. After credit_years is computed, payroll_service checks YTD credit across employments in the same concurrent_employment_group and caps/flags the row. Silently skipped if `concurrent_employment_max_annual_credit` config key is absent._
 
-**US-E09** `[GAP]`  
+**US-E09** `[BUILT]`  
 As **Fund Staff**, I want to record a member's death and have all active employer records closed automatically, so that no further payroll posts or benefit payments are processed.  
-_Gap: `record_death` sets member\_status=deceased and blocks writes, but does not auto-close open EmploymentRecords or pending BenefitPayments._
+_Tests: test_contract_service.py. `record_death` now queries open EmploymentRecords (termination_date IS NULL) and sets termination_date=death_date, termination_reason="deceased" in the same transaction._
 
 **US-E10** `[PARTIAL]`  
 As **Fund Staff**, I want to view a list of all current employers and their active member counts, so that I can manage fund membership by employer.  
@@ -391,13 +391,13 @@ _Tests: test_billing_service.py_
 As **Fund Staff**, I want to view all invoices for an employer with status filtering, so that I can track outstanding obligations.  
 _Tests: test_billing_service.py_
 
-**US-BL11** `[GAP]`  
+**US-BL11** `[BUILT]`  
 As **Fund Staff**, I want the system to automatically mark invoices as overdue when their due date passes without full payment, so that delinquent accounts are flagged.  
-_Gap: `overdue` is a defined status on the model but nothing transitions invoices to it. No background job or scheduled check._
+_Tests: test_billing_service.py. `mark_overdue_invoices(session, as_of)` transitions all issued invoices past their due_date to overdue. Exposed via POST /billing/invoices/mark-overdue (admin scope, optional as_of query param)._
 
-**US-BL12** `[GAP]`  
+**US-BL12** `[BUILT]`  
 As **Fund Staff**, I want to calculate and apply late payment interest to an overdue invoice, so that the employer is charged the correct penalty.  
-_Gap: `interest_accrued` field exists on EmployerInvoice but no service function computes or applies it._
+_Tests: test_billing_service.py. `accrue_interest(invoice, annual_rate_pct, session, as_of)` computes simple daily interest from due_date to as_of and adds to interest_accrued. Exposed via POST /billing/invoices/{id}/accrue-interest with body {annual_rate_pct, as_of}._
 
 **US-BL13** `[GAP]`  
 As **Fund Staff**, I want to batch multiple payroll reports across multiple periods into a single deficiency invoice, so that I can issue one bill for a multi-period shortfall.  
@@ -563,9 +563,9 @@ _Tests: test_api_key_service.py_
 As **System Admin**, I want to rotate an API key (generating a new one and deactivating the old), so that keys can be cycled on a schedule or after a suspected compromise.  
 _Tests: test_api_key_service.py_
 
-**US-AK05** `[GAP]`  
+**US-AK05** `[BUILT]`  
 As **System Admin**, I want to set an expiry date on an API key, so that integrations must periodically re-authenticate and I can enforce key rotation policy.  
-_Gap: `expires_at` field exists on ApiKey model; not enforced at validation time in `deps.py`._
+_Tests: test_api_key_service.py. `validate_key()` in api_key_service.py checks expires_at < now() and returns None if expired, blocking auth in deps.py._
 
 **US-AK06** `[GAP]`  
 As **System Admin**, I want to see a log of the last time each API key was used and from which IP address, so that I can detect unusual access patterns.  
@@ -713,10 +713,10 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 105 |
-| `[PARTIAL]` | 2 |
+| `[BUILT]` | 111 |
+| `[PARTIAL]` | 1 |
 | `[STUB]` | 3 |
-| `[GAP]` | 48 |
+| `[GAP]` | 43 |
 | **Total** | **158** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)

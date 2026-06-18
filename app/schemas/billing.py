@@ -63,6 +63,11 @@ class VoidInvoiceRequest(BaseModel):
     void_reason: str
 
 
+class AccrueInterestRequest(BaseModel):
+    annual_rate_pct: float
+    as_of: date | None = None
+
+
 class InvoicePaymentCreate(BaseModel):
     amount: Decimal
     payment_date: date

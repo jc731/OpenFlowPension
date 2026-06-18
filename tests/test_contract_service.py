@@ -195,7 +195,8 @@ async def test_terminate_already_terminated_raises(session):
         employer, member = await _setup(session)
         emp = await new_hire(member.id, _hire_data(employer.id), session)
         await terminate(emp.id, member.id, TerminationCreate(termination_date=date(2030, 1, 1)), session)
-        with pytest.raises(ValueError, match="already terminated"):
+        # After termination, member status is "terminated" — the member-level guard fires first
+        with pytest.raises(ValueError):
             await terminate(emp.id, member.id, TerminationCreate(termination_date=date(2030, 6, 1)), session)
 
 
@@ -301,3 +302,45 @@ async def test_death_blocks_further_changes(session):
         await record_death(member.id, DeathRecordCreate(death_date=date(2030, 1, 1)), session)
         with pytest.raises(ValueError, match="deceased"):
             await terminate(emp.id, member.id, TerminationCreate(termination_date=date(2030, 6, 1)), session)
+
+
+async def test_death_closes_open_employments(session):
+    async with session.begin():
+        employer, member = await _setup(session)
+        emp = await new_hire(member.id, _hire_data(employer.id), session)
+        death_date = date(2030, 1, 1)
+        await record_death(member.id, DeathRecordCreate(death_date=death_date), session)
+
+    from sqlalchemy import select
+    from app.models.employment import EmploymentRecord
+    result = await session.execute(select(EmploymentRecord).where(EmploymentRecord.id == emp.id))
+    closed = result.scalar_one()
+    assert closed.termination_date == death_date
+    assert closed.termination_reason == "deceased"
+
+
+# ── US-E07: salary history service ────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_salary_history_returns_all_records_desc(session):
+    from app.services.employment_service import get_salary_history
+    from sqlalchemy import select
+    from app.models.employment import EmploymentRecord
+
+    async with session.begin():
+        employer, member = await _setup(session)
+        emp = await new_hire(member.id, _hire_data(employer.id), session)
+        await change_percent_time(
+            emp.id, member.id,
+            PercentTimeChangeCreate(
+                new_percent_time=75.0,
+                effective_date=date(2026, 1, 1),
+                new_annual_salary=Decimal("65000"),
+                change_reason="reduction",
+            ),
+            session,
+        )
+
+    rows = await get_salary_history(member.id, session)
+    assert len(rows) == 2
+    assert rows[0].effective_date >= rows[1].effective_date  # DESC

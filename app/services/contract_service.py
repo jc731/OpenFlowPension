@@ -215,10 +215,10 @@ async def terminate(
     changed_by: uuid.UUID | None = None,
 ) -> EmploymentRecord:
     member = await _get_member(member_id, session)
+    _check_transition(member.member_status, "terminate")
     emp = await _get_employment(employment_id, member_id, session)
     if emp.termination_date is not None:
         raise ValueError("Employment record is already terminated")
-    _check_transition(member.member_status, "terminate")
 
     emp.termination_date = data.termination_date
     emp.termination_reason = data.termination_reason
@@ -343,13 +343,24 @@ async def record_death(
 ) -> MemberStatusHistory:
     member = await _get_member(member_id, session)
     _check_transition(member.member_status, "death")
-    return await _write_status(
+    history = await _write_status(
         member, "deceased", data.death_date, "death",
         session,
         reason="death",
         changed_by=changed_by,
         note=data.note,
     )
+    open_emps_result = await session.execute(
+        select(EmploymentRecord).where(
+            EmploymentRecord.member_id == member_id,
+            EmploymentRecord.termination_date.is_(None),
+        )
+    )
+    for emp in open_emps_result.scalars().all():
+        emp.termination_date = data.death_date
+        emp.termination_reason = "deceased"
+    await session.flush()
+    return history
 
 
 async def begin_annuity(

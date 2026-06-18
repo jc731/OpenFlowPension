@@ -510,6 +510,75 @@ async def test_create_deficiency_invoice(session):
     assert str(report.id) in invoice.source_report_ids
 
 
+# ── Overdue + interest tests (US-BL11, US-BL12) ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_mark_overdue_invoices(session):
+    employer = await _make_employer(session)
+    invoice = await svc.create_supplemental_invoice(
+        employer_id=employer.id,
+        amount_due=Decimal("500.00"),
+        due_date=date(2024, 1, 1),
+        line_items=[],
+        session=session,
+    )
+    await svc.issue_invoice(invoice, session)
+    await session.flush()
+
+    count = await svc.mark_overdue_invoices(session, as_of=date(2024, 2, 1))
+    assert count == 1
+    assert invoice.status == "overdue"
+
+
+@pytest.mark.asyncio
+async def test_mark_overdue_skips_draft_and_paid(session):
+    employer = await _make_employer(session)
+    draft = await svc.create_supplemental_invoice(
+        employer_id=employer.id, amount_due=Decimal("100.00"),
+        due_date=date(2024, 1, 1), line_items=[], session=session,
+    )
+    await session.flush()
+
+    count = await svc.mark_overdue_invoices(session, as_of=date(2024, 2, 1))
+    assert count == 0
+    assert draft.status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_accrue_interest(session):
+    employer = await _make_employer(session)
+    invoice = await svc.create_supplemental_invoice(
+        employer_id=employer.id,
+        amount_due=Decimal("1000.00"),
+        due_date=date(2024, 1, 1),
+        line_items=[],
+        session=session,
+    )
+    await svc.issue_invoice(invoice, session)
+    await svc.mark_overdue_invoices(session, as_of=date(2024, 4, 1))
+    await session.flush()
+
+    # Jan 1 → Apr 1 = 91 days; 1000 * 10% * 91/365 ≈ 24.93
+    updated = await svc.accrue_interest(invoice, annual_rate_pct=10.0, session=session, as_of=date(2024, 4, 1))
+    assert updated.interest_accrued > 0
+    days = (date(2024, 4, 1) - date(2024, 1, 1)).days
+    expected = round(1000.0 * 0.10 * days / 365, 2)
+    assert abs(updated.interest_accrued - expected) < 0.01
+
+
+@pytest.mark.asyncio
+async def test_accrue_interest_wrong_status_raises(session):
+    employer = await _make_employer(session)
+    invoice = await svc.create_supplemental_invoice(
+        employer_id=employer.id, amount_due=Decimal("500.00"),
+        due_date=date(2024, 1, 1), line_items=[], session=session,
+    )
+    await session.flush()
+
+    with pytest.raises(ValueError, match="status"):
+        await svc.accrue_interest(invoice, annual_rate_pct=10.0, session=session, as_of=date(2024, 4, 1))
+
+
 # ── list_rates test ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

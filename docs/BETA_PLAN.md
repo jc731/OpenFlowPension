@@ -44,13 +44,13 @@ Staff can't run a pilot if they can't find members or maintain their contact det
 Reviewed all 9 admin pages at 1920×1080 and 1280×800 with seeded data. Layout holds up at both sizes — no overflow or clipping anywhere. Functional/content flags to fold into Phase 2 (not yet fixed):
 
 - [x] Dashboard "Total Members" — fetch limit raised to 500; count reflects actual membership
-- [ ] "Plan" column (member list) and "Plan Choice" card (member detail) show lock state (Open/Locked), never the actual plan tier/type names
-- [ ] Member detail "Member Since" displays `created_at` (record import date) — misleading; should be certification or first hire date
+- [x] "Plan" column (member list) and "Plan Choice" card (member detail) — shows tier · type names via `/plan-config` lookup; lock state shown as secondary line on detail card
+- [x] Member detail — "Member Since" renamed "Cert Date" showing `certification_date`; separate "Record Created" card shows `created_at` with accurate label
 - [x] Status vocabulary drift — seed corrected to `annuitant`; `formatStatus()` util normalises all snake_case status strings across badges
 - [x] PayrollDetail — `flagged` status mapped; `validation_warnings` displayed per row with amber icons
 - [x] Member list search — wired to server-side `q`/`status` params with debounce (Phase 2)
 - [x] Retirement Cases list — `list_all_cases` LEFT JOINs members; list shows member name + number instead of truncated UUID
-- [ ] API Keys page has no empty-state message (blank table body); empty states inconsistent across pages
+- [x] API Keys page empty state — "No API keys yet. Create one above." message present
 - [x] System Config page — read-only view complete: fetches real DB values via `GET /system-configurations`, renders each key as an expand/collapse card with active value (JSON prettified) and historical rows. Editing (US-CF04) requires a write endpoint that doesn't exist yet; deferred to a later sprint.
 - [x] `make seed` doesn't seed `employment_types`/`leave_types` (CLAUDE.md claims it does) — hiring via API fails on a fresh dev environment; backfilled manually in the dev DB
 

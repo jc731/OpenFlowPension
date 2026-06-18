@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import Principal, principal_uuid, require_scope
 from app.database import get_session
 from app.schemas.billing import (
+    AccrueInterestRequest,
     DeficiencyCalcRequest,
     DeficiencyCalcResult,
     DeficiencyInvoiceCreate,
@@ -194,6 +196,35 @@ async def void_invoice(
             raise HTTPException(status_code=404, detail="Invoice not found")
         try:
             invoice = await billing_service.void_invoice(invoice, body.void_reason, session, voided_by=voided_by)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        await session.refresh(invoice, ["payments"])
+        return InvoiceRead.model_validate(invoice)
+
+
+@router.post("/billing/invoices/mark-overdue", dependencies=[_ADMIN])
+async def mark_overdue_invoices(
+    as_of: date | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    async with session.begin():
+        count = await billing_service.mark_overdue_invoices(session, as_of=as_of)
+    return {"marked": count}
+
+
+@router.post("/billing/invoices/{invoice_id}/accrue-interest", response_model=InvoiceRead,
+             dependencies=[Depends(require_scope("admin"))])
+async def accrue_interest(
+    invoice_id: uuid.UUID,
+    body: AccrueInterestRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    async with session.begin():
+        invoice = await billing_service.get_invoice(invoice_id, session)
+        if invoice is None:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        try:
+            invoice = await billing_service.accrue_interest(invoice, body.annual_rate_pct, session, as_of=body.as_of)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         await session.refresh(invoice, ["payments"])

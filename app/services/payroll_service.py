@@ -19,7 +19,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -212,6 +212,42 @@ async def _process_row(
         row.days_worked,
         float(employment.percent_time),
     )
+
+    # 4a. Concurrent employment credit cap (enforced only when config key is present)
+    if credit_years > 0 and employment.concurrent_employment_group is not None:
+        try:
+            cap_cfg = await get_config("concurrent_employment_max_annual_credit", row.period_end, session)
+            max_annual = float(cap_cfg.config_value["max_credit_years"])
+            year = row.period_end.year
+            ytd_result = await session.execute(
+                select(func.coalesce(func.sum(ServiceCreditEntry.credit_years), 0.0))
+                .join(EmploymentRecord, ServiceCreditEntry.employment_id == EmploymentRecord.id)
+                .where(
+                    ServiceCreditEntry.member_id == member.id,
+                    EmploymentRecord.concurrent_employment_group == employment.concurrent_employment_group,
+                    func.extract("year", ServiceCreditEntry.period_end) == year,
+                    ServiceCreditEntry.voided_at.is_(None),
+                )
+            )
+            ytd_credit = float(ytd_result.scalar_one())
+            available = max_annual - ytd_credit
+            if available <= 0:
+                credit_years = 0.0
+                msg = f"Concurrent employment annual credit cap ({max_annual} yr) reached for {year}"
+                row.validation_warnings = (row.validation_warnings or []) + [msg]
+                if row.status not in ("error", "flagged"):
+                    row.status = "flagged"
+            elif credit_years > available:
+                msg = (
+                    f"Credit capped at {available:.4f} yr "
+                    f"(concurrent cap {max_annual}/yr for {year})"
+                )
+                credit_years = available
+                row.validation_warnings = (row.validation_warnings or []) + [msg]
+                if row.status not in ("error", "flagged"):
+                    row.status = "flagged"
+        except ConfigNotFoundError:
+            pass
 
     # 5. Service credit entry (skip if zero — e.g. days_worked == 0)
     if credit_years > 0:
