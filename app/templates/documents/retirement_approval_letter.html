@@ -1,0 +1,101 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">Retirement Approval — {{ case_retirement_date }}</h2>
+
+<div class="doc-body">
+
+  <p>Dear {{ member_full_name }},</p>
+
+  {% if retirement_case_error %}
+  <div class="notice">
+    <strong>Note:</strong> {{ retirement_case_error }}
+  </div>
+  {% else %}
+
+  <p>
+    We are pleased to inform you that your retirement application has been
+    <strong>approved</strong>. The following benefit has been established effective
+    {{ case_retirement_date }}.
+  </p>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Approved Retirement Benefit</th>
+    </tr>
+    <tr>
+      <td>Retirement Date</td>
+      <td>{{ case_retirement_date }}</td>
+    </tr>
+    <tr>
+      <td>Benefit Option</td>
+      <td>{{ case_benefit_option }}</td>
+    </tr>
+    <tr>
+      <td><strong>Monthly Annuity</strong></td>
+      <td class="amount"><strong>{{ case_monthly_annuity }}</strong></td>
+    </tr>
+    <tr>
+      <td>Annual Annuity</td>
+      <td class="amount">{{ case_annual_annuity }}</td>
+    </tr>
+    {% if case_first_payment_date %}
+    <tr>
+      <td>First Payment Date</td>
+      <td>{{ case_first_payment_date }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td>Approval Date</td>
+      <td>{{ case_approved_date }}</td>
+    </tr>
+  </table>
+
+  {% if employer_name %}
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Member Summary</th>
+    </tr>
+    <tr>
+      <td>Member Number</td>
+      <td>{{ member_number }}</td>
+    </tr>
+    <tr>
+      <td>Employer</td>
+      <td>{{ employer_name }}</td>
+    </tr>
+    <tr>
+      <td>Total Service Credit</td>
+      <td>{{ total_service_credit_display }}</td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <div class="notice">
+    <strong>Important:</strong> Your approved monthly annuity of {{ case_monthly_annuity }}
+    is final and will not change unless a qualifying life event (such as a COLA adjustment
+    or QILDRO order) applies. Please verify that your bank account and tax withholding
+    elections are current before your first payment date.
+  </div>
+
+  <p>
+    If you have any questions about your approved benefit, please contact
+    {{ fund_name }} at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}.
+  </p>
+
+  {% endif %}
+
+</div>
+
+<div class="signature-block">
+  <p>Sincerely,</p>
+  <div class="signature-line">
+    {{ fund_name }}<br>
+    Retirement Services
+  </div>
+</div>
+
+{% endblock %}

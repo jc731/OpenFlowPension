@@ -1,0 +1,121 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">
+  {{ invoice_type }} Invoice — Due {{ invoice_due_date }}
+</h2>
+
+<div class="doc-body">
+
+  {% if invoice_error %}
+  <div class="notice">
+    <strong>Error:</strong> {{ invoice_error }}
+  </div>
+  {% else %}
+
+  <div class="recipient-block" style="margin-bottom: 18pt;">
+    <strong>{{ invoice_employer_name }}</strong>
+    {% if invoice_employer_code %}<br>Employer Code: {{ invoice_employer_code }}{% endif %}
+  </div>
+
+  <p>
+    This notice is to inform you that {{ fund_name }} has issued the following
+    <strong>{{ invoice_type | lower }}</strong> invoice to your organization.
+    Payment is due by <strong>{{ invoice_due_date }}</strong>.
+  </p>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Invoice Summary</th>
+    </tr>
+    <tr>
+      <td>Invoice Reference</td>
+      <td>{{ invoice_id_short }}</td>
+    </tr>
+    <tr>
+      <td>Invoice Type</td>
+      <td>{{ invoice_type }}</td>
+    </tr>
+    {% if invoice_period_start %}
+    <tr>
+      <td>Period Covered</td>
+      <td>{{ invoice_period_start }} – {{ invoice_period_end }}</td>
+    </tr>
+    {% endif %}
+    {% if invoice_issued_date %}
+    <tr>
+      <td>Date Issued</td>
+      <td>{{ invoice_issued_date }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td>Due Date</td>
+      <td>{{ invoice_due_date }}</td>
+    </tr>
+  </table>
+
+  {% if invoice_line_items %}
+  <table class="data-table">
+    <tr>
+      <th>Description</th>
+      <th class="amount">Amount</th>
+    </tr>
+    {% for item in invoice_line_items %}
+    <tr>
+      <td>{{ item.description | default(item.type, true) }}</td>
+      <td class="amount">${{ "%.2f" | format(item.amount | float) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Balance Due</th>
+    </tr>
+    <tr>
+      <td>Total Invoiced</td>
+      <td class="amount">{{ invoice_amount_due }}</td>
+    </tr>
+    {% if invoice_amount_paid and invoice_amount_paid != "$0.00" %}
+    <tr>
+      <td>Payments Received</td>
+      <td class="amount">{{ invoice_amount_paid }}</td>
+    </tr>
+    {% endif %}
+    {% if invoice_interest_accrued %}
+    <tr>
+      <td>Interest Accrued</td>
+      <td class="amount">{{ invoice_interest_accrued }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td><strong>Balance Due</strong></td>
+      <td class="amount"><strong>{{ invoice_amount_balance }}</strong></td>
+    </tr>
+  </table>
+
+  {% if invoice_note %}
+  <div class="notice">{{ invoice_note }}</div>
+  {% endif %}
+
+  <div class="notice">
+    <strong>Payment Instructions:</strong> Remit payment to {{ fund_name }} by
+    {{ invoice_due_date }}. Please reference invoice {{ invoice_id_short }} on your
+    remittance. Late payments may be subject to interest charges per fund policy.
+    Contact us at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}
+    with questions.
+  </div>
+
+  {% endif %}
+
+</div>
+
+<div class="confidential" style="margin-top: 24pt; border-top: 1px solid #ddd; padding-top: 8pt; font-size: 8pt; color: #888;">
+  This document is intended solely for the named employer organization. {{ fund_name }}.
+</div>
+
+{% endblock %}

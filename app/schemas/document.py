@@ -30,7 +30,7 @@ class DocumentTemplateRead(BaseModel):
 
 class GenerateDocumentRequest(BaseModel):
     slug: str
-    member_id: uuid.UUID
+    member_id: uuid.UUID | None = None
     params: dict[str, Any] = {}
 
 

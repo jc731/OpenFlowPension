@@ -529,6 +529,61 @@ async def seed():
                     "params_schema": {"retirement_date": "date", "sick_leave_days": "int", "benefit_option_type": "str"},
                 },
             ),
+            dict(
+                slug="welcome_letter",
+                document_type="letter",
+                template_file="welcome_letter.html",
+                description="Welcome letter for newly enrolled members",
+                config_value={
+                    "context": ["member_info", "employment_summary", "service_credit_summary"],
+                    "title": "Welcome Letter",
+                    "params_schema": {},
+                },
+            ),
+            dict(
+                slug="retirement_approval_letter",
+                document_type="letter",
+                template_file="retirement_approval_letter.html",
+                description="Formal retirement approval letter confirming approved monthly annuity",
+                config_value={
+                    "context": ["member_info", "employment_summary", "service_credit_summary", "retirement_case"],
+                    "title": "Retirement Approval Letter",
+                    "params_schema": {},
+                },
+            ),
+            dict(
+                slug="service_purchase_approval_letter",
+                document_type="letter",
+                template_file="service_purchase_approval_letter.html",
+                description="Service purchase claim status letter (approval, in-payment, completed)",
+                config_value={
+                    "context": ["member_info", "service_purchase_claim"],
+                    "title": "Service Purchase Letter",
+                    "params_schema": {"claim_id": "uuid"},
+                },
+            ),
+            dict(
+                slug="deficiency_billing_notice",
+                document_type="notice",
+                template_file="deficiency_billing_notice.html",
+                description="Employer deficiency or supplemental invoice notice — no member_id required",
+                config_value={
+                    "context": ["employer_invoice"],
+                    "title": "Deficiency Billing Notice",
+                    "params_schema": {"invoice_id": "uuid"},
+                },
+            ),
+            dict(
+                slug="payment_check_stub",
+                document_type="statement",
+                template_file="payment_check_stub.html",
+                description="Monthly payment notice / check stub showing gross, deductions, and net",
+                config_value={
+                    "context": ["member_info", "tax_elections", "payment_detail"],
+                    "title": "Payment Notice",
+                    "params_schema": {"payment_id": "uuid"},
+                },
+            ),
         ]
         for dt in doc_templates:
             await get_or_create(

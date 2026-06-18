@@ -24,12 +24,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.address import MemberAddress
 from app.models.beneficiary import Beneficiary
+from app.models.billing import EmployerInvoice
 from app.models.employer import Employer
 from app.models.employment import EmploymentRecord
 from app.models.member import Member
+from app.models.payment import BenefitPayment, TaxWithholdingElection
 from app.models.payroll import ContributionRecord
+from app.models.retirement_case import RetirementCase
 from app.models.service_credit import ServiceCreditEntry
-from app.models.payment import TaxWithholdingElection
+from app.models.service_purchase import ServicePurchaseClaim
 from app.services.config_service import ConfigNotFoundError, get_config
 
 
@@ -299,6 +302,136 @@ async def _beneficiaries(member_id: uuid.UUID | None, params: dict, session: Asy
     }
 
 
+async def _retirement_case(member_id: uuid.UUID | None, params: dict, session: AsyncSession) -> dict:
+    """Most recent approved or active retirement case for the member."""
+    if not member_id:
+        return {}
+    result = await session.execute(
+        select(RetirementCase)
+        .where(
+            RetirementCase.member_id == member_id,
+            RetirementCase.status.in_(["approved", "active"]),
+        )
+        .order_by(RetirementCase.approved_at.desc())
+        .limit(1)
+    )
+    case = result.scalar_one_or_none()
+    if not case:
+        return {"retirement_case_error": "No approved or active retirement case found"}
+    annual = (
+        _format_currency(Decimal(str(case.final_monthly_annuity)) * 12)
+        if case.final_monthly_annuity
+        else ""
+    )
+    return {
+        "case_retirement_date": _format_date(case.retirement_date),
+        "case_monthly_annuity": _format_currency(case.final_monthly_annuity),
+        "case_annual_annuity": annual,
+        "case_benefit_option": case.benefit_option_type.replace("_", " ").title(),
+        "case_status": case.status,
+        "case_approved_date": _format_date(case.approved_at.date() if case.approved_at else None),
+        "case_first_payment_date": _format_date(case.first_payment_date),
+    }
+
+
+async def _service_purchase_claim(member_id: uuid.UUID | None, params: dict, session: AsyncSession) -> dict:
+    """Service purchase claim loaded by claim_id param."""
+    claim_id_raw = params.get("claim_id")
+    if not claim_id_raw:
+        return {"service_purchase_error": "claim_id param required"}
+    try:
+        claim_id = uuid.UUID(str(claim_id_raw))
+    except ValueError:
+        return {"service_purchase_error": "Invalid claim_id"}
+    claim = await session.get(ServicePurchaseClaim, claim_id)
+    if not claim:
+        return {"service_purchase_error": "Claim not found"}
+    return {
+        "claim_purchase_type": claim.purchase_type.replace("_", " ").title(),
+        "claim_credit_years": f"{float(claim.credit_years):.4f}",
+        "claim_period_start": _format_date(claim.period_start),
+        "claim_period_end": _format_date(claim.period_end),
+        "claim_cost_total": _format_currency(claim.cost_total),
+        "claim_cost_paid": _format_currency(claim.cost_paid),
+        "claim_status": claim.status.replace("_", " ").title(),
+        "claim_created_date": _format_date(claim.created_at.date()),
+        "claim_approved_date": _format_date(claim.approved_at.date() if claim.approved_at else None),
+        "claim_credit_grant_on": claim.credit_grant_on.replace("_", " ").title(),
+        "claim_installment_allowed": claim.installment_allowed,
+    }
+
+
+async def _employer_invoice(member_id: uuid.UUID | None, params: dict, session: AsyncSession) -> dict:
+    """Employer and invoice data loaded by invoice_id param. Works without a member_id."""
+    invoice_id_raw = params.get("invoice_id")
+    if not invoice_id_raw:
+        return {"invoice_error": "invoice_id param required"}
+    try:
+        invoice_id = uuid.UUID(str(invoice_id_raw))
+    except ValueError:
+        return {"invoice_error": "Invalid invoice_id"}
+    invoice = await session.get(EmployerInvoice, invoice_id)
+    if not invoice:
+        return {"invoice_error": "Invoice not found"}
+    employer = await session.get(Employer, invoice.employer_id)
+    balance = Decimal(str(invoice.amount_due)) - Decimal(str(invoice.amount_paid))
+    return {
+        "invoice_employer_name": employer.name if employer else "",
+        "invoice_employer_code": employer.employer_code if employer else "",
+        "invoice_id_short": str(invoice.id)[:8].upper(),
+        "invoice_type": invoice.invoice_type.replace("_", " ").title(),
+        "invoice_status": invoice.status,
+        "invoice_period_start": _format_date(invoice.period_start),
+        "invoice_period_end": _format_date(invoice.period_end),
+        "invoice_amount_due": _format_currency(invoice.amount_due),
+        "invoice_amount_paid": _format_currency(invoice.amount_paid),
+        "invoice_amount_balance": _format_currency(balance),
+        "invoice_interest_accrued": _format_currency(invoice.interest_accrued) if invoice.interest_accrued else "",
+        "invoice_due_date": _format_date(invoice.due_date),
+        "invoice_issued_date": _format_date(invoice.issued_at.date() if invoice.issued_at else None),
+        "invoice_line_items": invoice.line_items or [],
+        "invoice_note": invoice.note or "",
+    }
+
+
+async def _payment_detail(member_id: uuid.UUID | None, params: dict, session: AsyncSession) -> dict:
+    """Payment and deduction detail loaded by payment_id param."""
+    from sqlalchemy.orm import selectinload
+    payment_id_raw = params.get("payment_id")
+    if not payment_id_raw:
+        return {"payment_error": "payment_id param required"}
+    try:
+        payment_id = uuid.UUID(str(payment_id_raw))
+    except ValueError:
+        return {"payment_error": "Invalid payment_id"}
+    result = await session.execute(
+        select(BenefitPayment)
+        .where(BenefitPayment.id == payment_id)
+        .options(selectinload(BenefitPayment.deductions))
+    )
+    payment = result.scalar_one_or_none()
+    if not payment:
+        return {"payment_error": "Payment not found"}
+    deduction_list = [
+        {"type": d.deduction_type.replace("_", " ").title(), "amount": _format_currency(d.amount)}
+        for d in payment.deductions
+    ]
+    total_deductions = sum(Decimal(str(d.amount)) for d in payment.deductions)
+    return {
+        "payment_type": payment.payment_type.replace("_", " ").title(),
+        "payment_status": payment.status,
+        "payment_gross_amount": _format_currency(payment.gross_amount),
+        "payment_net_amount": _format_currency(payment.net_amount),
+        "payment_period_start": _format_date(payment.period_start),
+        "payment_period_end": _format_date(payment.period_end),
+        "payment_date": _format_date(payment.payment_date),
+        "payment_method": (payment.payment_method or "").upper(),
+        "payment_check_number": payment.check_number or "",
+        "payment_deductions": deduction_list,
+        "payment_total_deductions": _format_currency(total_deductions),
+    }
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 CONTEXT_PROVIDERS: dict = {
@@ -310,4 +443,8 @@ CONTEXT_PROVIDERS: dict = {
     "benefit_estimate": _benefit_estimate,
     "tax_elections": _tax_elections,
     "beneficiaries": _beneficiaries,
+    "retirement_case": _retirement_case,
+    "service_purchase_claim": _service_purchase_claim,
+    "employer_invoice": _employer_invoice,
+    "payment_detail": _payment_detail,
 }

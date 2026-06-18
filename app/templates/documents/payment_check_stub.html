@@ -1,0 +1,109 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">
+  Payment Notice — {{ payment_period_start }} to {{ payment_period_end }}
+</h2>
+
+<div class="doc-body">
+
+  {% if payment_error %}
+  <div class="notice">
+    <strong>Note:</strong> {{ payment_error }}
+  </div>
+  {% else %}
+
+  <p>Dear {{ member_full_name }},</p>
+
+  <p>
+    The following is your payment summary for the period
+    <strong>{{ payment_period_start }}</strong> through
+    <strong>{{ payment_period_end }}</strong>.
+    {% if payment_date %}Your payment date is <strong>{{ payment_date }}</strong>.{% endif %}
+  </p>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Payment Summary</th>
+    </tr>
+    <tr>
+      <td>Payment Type</td>
+      <td>{{ payment_type }}</td>
+    </tr>
+    <tr>
+      <td>Pay Period</td>
+      <td>{{ payment_period_start }} – {{ payment_period_end }}</td>
+    </tr>
+    <tr>
+      <td>Payment Date</td>
+      <td>{{ payment_date }}</td>
+    </tr>
+    <tr>
+      <td>Payment Method</td>
+      <td>{{ payment_method }}{% if payment_check_number %} #{{ payment_check_number }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td><strong>Gross Amount</strong></td>
+      <td class="amount"><strong>{{ payment_gross_amount }}</strong></td>
+    </tr>
+  </table>
+
+  {% if payment_deductions %}
+  <table class="data-table">
+    <tr>
+      <th>Deduction</th>
+      <th class="amount">Amount</th>
+    </tr>
+    {% for d in payment_deductions %}
+    <tr>
+      <td>{{ d.type }}</td>
+      <td class="amount">{{ d.amount }}</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td><strong>Total Deductions</strong></td>
+      <td class="amount"><strong>{{ payment_total_deductions }}</strong></td>
+    </tr>
+  </table>
+  {% endif %}
+
+  {% if tax_elections %}
+  <table class="data-table">
+    <tr>
+      <th>Withholding Election</th>
+      <th>Filing Status</th>
+      <th class="amount">Additional</th>
+    </tr>
+    {% for e in tax_elections %}
+    <tr>
+      <td>{{ e.jurisdiction | title }}</td>
+      <td>{{ e.filing_status }}</td>
+      <td class="amount">{{ e.additional_withholding }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Net Payment</th>
+    </tr>
+    <tr>
+      <td><strong>Net Amount</strong></td>
+      <td class="amount"><strong>{{ payment_net_amount }}</strong></td>
+    </tr>
+  </table>
+
+  <div class="notice">
+    Please retain this statement for your tax records. If you have questions about your
+    payment or withholding elections, contact {{ fund_name }} at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}.
+  </div>
+
+  {% endif %}
+
+</div>
+
+{% endblock %}

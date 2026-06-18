@@ -1,0 +1,101 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">Welcome to {{ fund_name }}</h2>
+
+<div class="doc-body">
+
+  <p>Dear {{ member_full_name }},</p>
+
+  <p>
+    We are pleased to confirm your enrollment in the {{ fund_name }} pension plan.
+    This letter summarizes the information on file for your account. Please review it
+    carefully and contact us if any details require correction.
+  </p>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Member Information</th>
+    </tr>
+    <tr>
+      <td>Member Number</td>
+      <td>{{ member_number }}</td>
+    </tr>
+    <tr>
+      <td>Name</td>
+      <td>{{ member_full_name }}</td>
+    </tr>
+    <tr>
+      <td>Certification Date</td>
+      <td>{{ member_certification_date }}</td>
+    </tr>
+    <tr>
+      <td>Member Status</td>
+      <td>{{ member_status | replace("_", " ") | title }}</td>
+    </tr>
+  </table>
+
+  {% if employer_name %}
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Employment on Record</th>
+    </tr>
+    <tr>
+      <td>Employer</td>
+      <td>{{ employer_name }}</td>
+    </tr>
+    <tr>
+      <td>Employment Type</td>
+      <td>{{ employment_type | replace("_", " ") | title }}</td>
+    </tr>
+    <tr>
+      <td>Hire Date</td>
+      <td>{{ hire_date }}</td>
+    </tr>
+    {% if percent_time != 100.0 %}
+    <tr>
+      <td>Percent Time</td>
+      <td>{{ percent_time }}%</td>
+    </tr>
+    {% endif %}
+  </table>
+  {% endif %}
+
+  {% if total_service_credit_years %}
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Service Credit</th>
+    </tr>
+    <tr>
+      <td>Total Service Credit Posted</td>
+      <td>{{ total_service_credit_display }}</td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <div class="notice">
+    <strong>Next Steps:</strong> Your pension contributions will be deducted from each paycheck
+    and remitted to {{ fund_name }} by your employer. You may request a benefit estimate at any
+    time by contacting our office. Please keep your mailing address, beneficiary designations,
+    and tax withholding elections up to date.
+  </div>
+
+  <p>
+    If you have questions about your account, please contact us at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}.
+    {% if fund_website %}Additional information is available at {{ fund_website }}.{% endif %}
+  </p>
+
+</div>
+
+<div class="signature-block">
+  <p>Sincerely,</p>
+  <div class="signature-line">
+    {{ fund_name }}<br>
+    Member Services
+  </div>
+</div>
+
+{% endblock %}

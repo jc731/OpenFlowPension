@@ -213,3 +213,17 @@ A QILDRO is a court order — issued in divorce proceedings — that entitles an
 - Plan-configurable lump sum continuation periods
 
 Defer until first fund goes live.
+
+---
+
+## IRS form PDF synchronization
+
+The IRS publishes official fillable PDFs for forms like W-4P, 1099-R, and W-2. Rather than building proprietary form designs, the fund could leverage IRS layout work by:
+
+- **Overlay approach:** render fund/member data onto official IRS PDF forms using a PDF library (e.g., `pypdf`, `pdfrw`, or `reportlab`) that fills form fields by name. IRS forms use named AcroForm fields — map our data keys to field names.
+- **Sync strategy:** IRS releases updated forms each year. A scheduled job could pull the current year's PDF from IRS.gov (predictable URLs like `https://www.irs.gov/pub/irs-pdf/fw4p.pdf`), checksum against stored version, alert staff if the form changed so field mappings can be reviewed.
+- **Scope:** 1099-R is the highest-priority candidate (required at year-end for every annuitant). W-4P is sent to members for elections. W-2 is employer-side (lower priority for this system).
+
+**Architecture note:** This approach replaces WeasyPrint for IRS-form documents; the existing HTML-template path remains for fund-generated letters (approval letters, billing notices, etc.). The two paths can coexist — add an `overlay_pdf` renderer alongside `render_to_pdf` in the document framework.
+
+**When to build:** Prioritize before first year-end with live annuity payments. 1099-R batch export (US-RP05) depends on this.

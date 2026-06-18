@@ -447,9 +447,9 @@ _Gap: `status=reversed` exists on BenefitPayment; no service function or endpoin
 As **Fund Staff**, I want to run a monthly payment batch that creates and issues all recurring annuity payments, so that I don't have to create each payment manually.  
 _Gap: No batch payment creation service function or endpoint. Each payment is created individually._
 
-**US-PY10** `[GAP]`  
+**US-PY10** `[BUILT]`  
 As **Fund Staff**, I want to generate and send a monthly check stub to each annuitant, so that they have a record of their gross amount, deductions, and net pay.  
-_Gap: NetPayResult schema has all the data; no document template for a check stub letter._
+_Template: payment_check_stub.html. Providers: member_info, tax_elections, payment_detail (payment_id param). Shows gross, itemized deductions, current withholding elections, and net._
 
 ---
 
@@ -503,9 +503,9 @@ _Tests: test_document_service.py_
 As **Fund Staff**, I want to retrieve and download a previously generated document as a PDF, so that I can attach it to a physical file or re-send it.  
 _Tests: test_document_service.py_
 
-**US-DG05** `[GAP]`  
+**US-DG05** `[BUILT]`  
 As **Fund Staff**, I want to generate a welcome letter for a new member, so that they receive introductory information about their pension plan.  
-_Gap: Framework built; no welcome letter template created._
+_Template: welcome_letter.html. Providers: member_info, employment_summary, service_credit_summary. No params required._
 
 **US-DG06** `[GAP]`  
 As **Fund Staff**, I want to generate an annual statement for each member showing their service credit, contributions, and projected benefit as of year-end, so that members have a yearly record.  
@@ -515,17 +515,33 @@ _Gap: Framework built; no annual statement template. Major planned document type
 As **Fund Staff**, I want to generate a 1099-R tax form for each annuitant showing their annual distributions, so that they can file their taxes correctly.  
 _Gap: Framework built; no 1099-R template. Major planned document type._
 
-**US-DG08** `[GAP]`  
+**US-DG08** `[BUILT]`  
 As **Fund Staff**, I want to generate a retirement approval letter after a case is approved, so that the member receives formal written notice of their approved benefit amount.  
-_Gap: Framework built; no retirement approval letter template._
+_Template: retirement_approval_letter.html. Providers: member_info, employment_summary, service_credit_summary, retirement_case (loads most recent approved/active case). No params required._
 
-**US-DG09** `[GAP]`  
+**US-DG09** `[BUILT]`  
 As **Fund Staff**, I want to generate a deficiency billing notice to send to an employer with the invoice details, so that they receive a formal written bill.  
-_Gap: Framework built; no billing notice template._
+_Template: deficiency_billing_notice.html. Provider: employer_invoice (invoice_id param). member_id not required — works with null member for employer documents._
 
 **US-DG10** `[STUB]`  
 As **Fund Staff**, I want to send a digital form (e.g. W-4P update request) to a member and automatically ingest their response to update their elections, so that elections can be updated without manual data entry.  
 _Gap: FormSubmission table stubbed; no parsing/ingest logic. Backlog item._
+
+**US-DG11** `[BUILT]`  
+As **Fund Staff**, I want to generate a service purchase status letter for a member, so that they receive written confirmation of their claim approval and credit details.  
+_Template: service_purchase_approval_letter.html. Providers: member_info, service_purchase_claim (claim_id param). Shows purchase type, period, credit years, cost, approval date._
+
+**US-DG12** `[GAP]`  
+As **Fund Staff**, I want to attach supporting documents (scanned or uploaded) to a service purchase claim, retirement case, or beneficiary record, so that the digital file includes the evidence we reviewed.  
+_Gap: No member_documents or attachment model. Would need a generic attachments table keyed by entity_type/entity_id + storage for file bytes or blob reference._
+
+**US-DG13** `[GAP]`  
+As **Fund Staff**, I want to mark a returned form (mailed or eFiled) as received and route it to the correct workflow, so that paper-to-digital intake is tracked with an audit trail.  
+_Gap: FormSubmission table has a "returned" status but no intake triage endpoint or workflow routing logic._
+
+**US-DG14** `[GAP]`  
+As **Member**, I want to upload supporting documents via the member portal, so that I can submit proof of service or other required documentation without mailing paper copies.  
+_Gap: Member portal not yet built. Architecture note: uploads should attach to a specific claim or case (entity_type/entity_id FK), not float as standalone docs._
 
 ---
 
@@ -713,17 +729,17 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 111 |
+| `[BUILT]` | 116 |
 | `[PARTIAL]` | 1 |
 | `[STUB]` | 3 |
-| `[GAP]` | 43 |
-| **Total** | **158** |
+| `[GAP]` | 45 |
+| **Total** | **165** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
 
-1. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing
-2. **Invoice overdue + interest accrual** (US-BL11, US-BL12) — model ready, no business logic
-3. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
-4. **Concurrent employment max credit enforcement** (US-E08) — config exists, not enforced
-5. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
-6. **API key expiry enforcement** (US-AK05) — field exists, not checked
+1. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing; defer until live payments/year-end
+2. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
+3. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
+4. **Supporting document attachments** (US-DG12) — needs attachment model (entity_type/entity_id) before portal upload or staff attachment work begins
+5. **Inbound form intake triage** (US-DG13) — FormSubmission table exists; no intake endpoint or routing
+6. **Beneficiary death / survivor annuity termination** (US-S08) — no endpoint or service function

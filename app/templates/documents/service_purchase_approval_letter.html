@@ -1,0 +1,104 @@
+{% extends "_base.html" %}
+
+{% block content %}
+
+<h2 class="doc-subject">Service Purchase — {{ claim_status }}</h2>
+
+<div class="doc-body">
+
+  <p>Dear {{ member_full_name }},</p>
+
+  {% if service_purchase_error %}
+  <div class="notice">
+    <strong>Note:</strong> {{ service_purchase_error }}
+  </div>
+  {% else %}
+
+  <p>
+    This letter confirms the status of your service purchase claim with {{ fund_name }}.
+    Please review the details below and retain this letter for your records.
+  </p>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Service Purchase Claim</th>
+    </tr>
+    <tr>
+      <td>Purchase Type</td>
+      <td>{{ claim_purchase_type }}</td>
+    </tr>
+    <tr>
+      <td>Period Covered</td>
+      <td>{{ claim_period_start }} – {{ claim_period_end }}</td>
+    </tr>
+    <tr>
+      <td>Credit to Be Granted</td>
+      <td class="amount">{{ claim_credit_years }} years</td>
+    </tr>
+    <tr>
+      <td>Status</td>
+      <td>{{ claim_status }}</td>
+    </tr>
+    {% if claim_approved_date %}
+    <tr>
+      <td>Approved</td>
+      <td>{{ claim_approved_date }}</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  <table class="data-table">
+    <tr>
+      <th colspan="2">Cost Summary</th>
+    </tr>
+    <tr>
+      <td>Total Cost</td>
+      <td class="amount">{{ claim_cost_total }}</td>
+    </tr>
+    <tr>
+      <td>Amount Paid</td>
+      <td class="amount">{{ claim_cost_paid }}</td>
+    </tr>
+    <tr>
+      <td>Credit Granted When</td>
+      <td>{{ claim_credit_grant_on }}</td>
+    </tr>
+    {% if claim_installment_allowed %}
+    <tr>
+      <td>Installment Payments</td>
+      <td>Allowed</td>
+    </tr>
+    {% endif %}
+  </table>
+
+  <div class="notice">
+    <strong>Note:</strong> Service credit will be posted to your account
+    {% if claim_credit_grant_on == "Approval" %}
+    upon approval of this claim.
+    {% elif claim_credit_grant_on == "First Payment" %}
+    upon receipt of your first payment.
+    {% else %}
+    when the claim is paid in full.
+    {% endif %}
+    Once posted, the purchased credit will be included in all future benefit calculations.
+  </div>
+
+  <p>
+    If you have questions about your service purchase, please contact us at
+    {% if fund_phone %}{{ fund_phone }}{% endif %}
+    {% if fund_email %}or {{ fund_email }}{% endif %}.
+  </p>
+
+  {% endif %}
+
+</div>
+
+<div class="signature-block">
+  <p>Sincerely,</p>
+  <div class="signature-line">
+    {{ fund_name }}<br>
+    Member Services
+  </div>
+</div>
+
+{% endblock %}
