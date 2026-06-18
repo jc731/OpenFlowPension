@@ -23,7 +23,7 @@ from app.services.benefit.service_credit import sick_leave_credit
 # FundConfig defaults
 # ---------------------------------------------------------------------------
 
-def test_fund_config_defaults_are_surs():
+def test_fund_config_system_defaults():
     cfg = FundConfig()
     assert cfg.tier_cutoff_date == date(2011, 1, 1)
     assert cfg.fae_tier_i_years == 4

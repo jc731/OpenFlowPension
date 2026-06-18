@@ -233,8 +233,8 @@ The calculation engine picks up the most recent config row with `effective_date 
 
 Before running production data, a fund will need to:
 
-1. **Replace actuarial tables** — CSVs in `data/actuarial_tables/` ship with SURS 2024 Experience Review factors. Swap in your fund's tables.
-2. **Seed `fund_calculation_config`** — override only the parameters that differ from SURS defaults. See `app/schemas/fund_config.py` for the full list.
+1. **Replace actuarial tables** — CSVs in `data/actuarial_tables/` ship with bundled sample factors (public employee fund, 2024 experience basis). Swap in your fund's tables.
+2. **Seed `fund_calculation_config`** — override only the parameters that differ from the platform defaults. See `app/schemas/fund_config.py` for the full list.
 3. **Seed `service_credit_accrual_rule`** — with your fund's rule and effective date(s).
 4. **Seed employer records** — one row per contributing employer in `employers`.
 5. **Configure `employment_types` and `leave_types`** — match your fund's classifications.

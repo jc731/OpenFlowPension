@@ -583,9 +583,9 @@ _Tests: test_fund_config_service.py, test_config_service.py_
 As **System Admin**, I want all fund rules to be effective-dated (new row supersedes old), so that historical calculations remain reproducible.  
 _Tests: test_config_service.py_
 
-**US-CF03** `[PARTIAL]`  
+**US-CF03** `[BUILT]`  
 As **System Admin**, I want to view all current system configuration values via the admin UI, so that I can verify what rules are in effect.  
-_Gap: System Config page exists in admin frontend but is read-only placeholder with no API backing._
+_Phase 2: SystemConfig page fetches live JSONB values from `GET /system-configurations`; expandable cards with active value (JSON prettified) and historical rows. Write path deferred to US-CF04._
 
 **US-CF04** `[GAP]`  
 As **System Admin**, I want to add or update a system configuration value via the admin UI with a future effective date, so that upcoming rule changes are staged without a DB migration.  
@@ -688,17 +688,21 @@ As **Annuitant (Member)**, I want to view my payment history and download check 
 
 ## Reporting & Analytics (Future)
 
-**US-RP01** `[GAP]`  
-As **Fund Staff**, I want to run a contribution report for a date range showing total employer and employee contributions by employer, so that I can reconcile fund inflows.
+**US-RP01** `[BUILT]`  
+As **Fund Staff**, I want to run a contribution report for a date range showing total employer and employee contributions by employer, so that I can reconcile fund inflows.  
+_Phase 3: typed JSON envelope (report_type, generated_at, parameters, summary, rows); ReportViewer frontend with client-side CSV export._
 
-**US-RP02** `[GAP]`  
-As **Fund Staff**, I want to generate a delinquency report showing employers with outstanding invoices past their due date, so that I can prioritize collections.
+**US-RP02** `[BUILT]`  
+As **Fund Staff**, I want to generate a delinquency report showing employers with outstanding invoices past their due date, so that I can prioritize collections.  
+_Phase 3: same envelope pattern; employers with invoices past due as of a given date._
 
-**US-RP03** `[GAP]`  
-As **Fund Staff**, I want to run a membership report showing active, terminated, and annuitant counts at a given date, so that actuarial assumptions can be validated.
+**US-RP03** `[BUILT]`  
+As **Fund Staff**, I want to run a membership report showing active, terminated, and annuitant counts at a given date, so that actuarial assumptions can be validated.  
+_Phase 3: current-snapshot member count grouped by status._
 
-**US-RP04** `[GAP]`  
-As **Fund Staff**, I want to export a list of all annuitants with their monthly payment amounts, for actuarial review and financial planning.
+**US-RP04** `[BUILT]`  
+As **Fund Staff**, I want to export a list of all annuitants with their monthly payment amounts, for actuarial review and financial planning.  
+_Phase 3: annuitants with approved/active retirement case benefit amounts._
 
 **US-RP05** `[GAP]`  
 As **System Admin**, I want to export a 1099-R batch file for all annuitants at year-end, so that tax forms can be generated and mailed.
@@ -709,18 +713,17 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 100 |
-| `[PARTIAL]` | 3 |
+| `[BUILT]` | 105 |
+| `[PARTIAL]` | 2 |
 | `[STUB]` | 3 |
-| `[GAP]` | 52 |
+| `[GAP]` | 48 |
 | **Total** | **158** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
 
-1. **Admin UI pages** — Billing, service purchase, beneficiaries, payments, documents, system config (US-UI08 through US-UI14)
-2. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing
-3. **Invoice overdue + interest accrual** (US-BL11, US-BL12) — model ready, no business logic
-4. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
-5. **Concurrent employment max credit enforcement** (US-E08) — config exists, not enforced
-6. **System config admin UI write path** (US-CF04) — read-only placeholder only
-7. **API key expiry enforcement** (US-AK05) — field exists, not checked
+1. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing
+2. **Invoice overdue + interest accrual** (US-BL11, US-BL12) — model ready, no business logic
+3. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
+4. **Concurrent employment max credit enforcement** (US-E08) — config exists, not enforced
+5. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
+6. **API key expiry enforcement** (US-AK05) — field exists, not checked

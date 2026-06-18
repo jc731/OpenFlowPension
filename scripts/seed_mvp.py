@@ -226,12 +226,12 @@ async def seed():
                 dict(
                     config_key="fund_info",
                     config_value={
-                        "name": "State Universities Retirement System",
-                        "short_name": "SURS",
-                        "address": "1901 Fox Drive, Champaign, IL 61820",
-                        "phone": "(800) 275-7877",
-                        "website": "surs.org",
-                        "email": "memberservices@surs.org",
+                        "name": "Municipal Pension Fund",
+                        "short_name": "MPF",
+                        "address": "1 Government Center, Suite 100, Springfield, IL 62701",
+                        "phone": "(800) 555-0100",
+                        "website": "pension.example.gov",
+                        "email": "memberservices@pension.example.gov",
                     },
                     effective_date=date(2000, 1, 1),
                     superseded_date=None,

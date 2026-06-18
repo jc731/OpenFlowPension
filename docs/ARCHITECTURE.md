@@ -477,7 +477,7 @@ EXPLICIT_ASSEMBLERS["my_complex_letter"] = async def(member_id, params, session)
 
 ### Template authoring
 
-`app/templates/documents/_base.html` — Jinja2 base with WeasyPrint `@page` CSS (letter, 1in margins, page X of Y footer), `.letterhead` block using fund contact data, `.data-table` with SURS-blue header styling. All letters extend this via `{% extends "_base.html" %}`.
+`app/templates/documents/_base.html` — Jinja2 base with WeasyPrint `@page` CSS (letter, 1in margins, page X of Y footer), `.letterhead` block using fund contact data, `.data-table` with a configurable fund brand color header. All letters extend this via `{% extends "_base.html" %}`.
 
 Scaffold helper: `python scripts/scaffold_document.py <slug> <type> --context p1 p2` — creates a starter HTML template with context variable hints and prints the DB seed entry.
 

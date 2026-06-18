@@ -131,7 +131,7 @@ Two separate frontends, both driven 100% by the existing REST API. Neither porta
 
 ## Return to Work (RTW) — affected annuitant + FAE billing
 
-When a SURS annuitant returns to covered employment, two different rules apply depending on annuitant sub-type:
+When an annuitant returns to covered employment, two different rules apply depending on annuitant sub-type:
 
 - **Affected annuitant:** annuity is NOT paused. Employer is billed for the RTW employment. FAE billing fires separately if the RTW salary exceeds the original FAE threshold (salary spike billing against the employer).
 - **Re-retiree:** different RTW rules (annuity may be paused, no FAE billing).
@@ -177,9 +177,9 @@ Two distinct use cases:
 - SPARK file exchange: outbound contribution file to Voya each payroll cycle (fixed-format or API); inbound balance confirmation. Likely a Celery task.
 - RSP termination workflow: SPARK contribution drops to $0; termination record created; no separation refund path (member goes directly to Voya for distribution).
 - RSP retirement paths:
-  - Annuitized: Voya manages ongoing annuity; SURS records the annuitization event.
-  - Non-annuitized: Voya distributes lump sum; member status → inactive; no SURS annuity stream.
-- Blocked rehire: if `plan_type == "rsp"` and `member_status == "annuitant"`, reject any new hire into SURS-covered employment.
+  - Annuitized: Voya manages ongoing annuity; the fund records the annuitization event.
+  - Non-annuitized: Voya distributes lump sum; member status → inactive; no ongoing fund annuity stream.
+- Blocked rehire: if `plan_type == "rsp"` and `member_status == "annuitant"`, reject any new hire into fund-covered employment.
 - Death benefit: depends on election at enrollment (remaining account balance to beneficiary vs continued annuity to survivor).
 
 **Design note:** RSP is substantial enough to warrant its own service module (`app/services/rsp_service.py`) and models. Do not bolt onto existing `service_purchase` or `payment` tables.
