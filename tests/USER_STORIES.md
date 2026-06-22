@@ -275,9 +275,9 @@ _Gap: Backlog item. Current implementation requires primary beneficiary._
 As **Fund Staff**, I want to configure plan-specific lump-sum continuation periods for certain benefit options, so that survivor benefits are paid for the correct minimum duration.  
 _Gap: Backlog item._
 
-**US-S08** `[GAP]`  
+**US-S08** `[BUILT]`  
 As **Fund Staff**, I want to record a beneficiary's death and terminate their survivor annuity payments, so that disbursement stops correctly.  
-_Gap: No endpoint or service function for beneficiary death recording or survivor annuity termination._
+_Service: `terminate_survivor_annuity(beneficiary_id, death_date, session)` in survivor_service.py. Sets `deceased_date` + `end_date` on beneficiary; cancels pending/held survivor_annuity payments. Endpoint: `POST /beneficiaries/{id}/death`. Tests: test_survivor_termination.py_
 
 ---
 
@@ -531,13 +531,13 @@ _Gap: FormSubmission table stubbed; no parsing/ingest logic. Backlog item._
 As **Fund Staff**, I want to generate a service purchase status letter for a member, so that they receive written confirmation of their claim approval and credit details.  
 _Template: service_purchase_approval_letter.html. Providers: member_info, service_purchase_claim (claim_id param). Shows purchase type, period, credit years, cost, approval date._
 
-**US-DG12** `[GAP]`  
+**US-DG12** `[BUILT]`  
 As **Fund Staff**, I want to attach supporting documents (scanned or uploaded) to a service purchase claim, retirement case, or beneficiary record, so that the digital file includes the evidence we reviewed.  
-_Gap: No member_documents or attachment model. Would need a generic attachments table keyed by entity_type/entity_id + storage for file bytes or blob reference._
+_Model: `document_attachments` table keyed by entity_type + entity_id (polymorphic). Filesystem-backed (ATTACHMENT_STORAGE_DIR env var; relative storage_path in DB for storage swap). Endpoints: `POST /attachments/{entity_type}/{entity_id}` (multipart), `GET /attachments/{entity_type}/{entity_id}`, `GET /attachments/{id}/content`. Supported types: service_purchase_claim, retirement_case, beneficiary, member, payment_batch._
 
-**US-DG13** `[GAP]`  
+**US-DG13** `[BUILT]`  
 As **Fund Staff**, I want to mark a returned form (mailed or eFiled) as received and route it to the correct workflow, so that paper-to-digital intake is tracked with an audit trail.  
-_Gap: FormSubmission table has a "returned" status but no intake triage endpoint or workflow routing logic._
+_Service: form_submission_service.py — create_form_submission, mark_returned (sent→returned + stores return_data), cancel_submission, expire_submission. Endpoints: POST/GET /form-submissions, GET /members/{id}/form-submissions, PATCH /form-submissions/{id}/returned|cancel|expire. Ingest parsers (return_data → service calls) are per-form-type stubs in BACKLOG. Tests: test_form_submission_service.py_
 
 **US-DG14** `[GAP]`  
 As **Member**, I want to upload supporting documents via the member portal, so that I can submit proof of service or other required documentation without mailing paper copies.  
@@ -603,13 +603,13 @@ _Tests: test_config_service.py_
 As **System Admin**, I want to view all current system configuration values via the admin UI, so that I can verify what rules are in effect.  
 _Phase 2: SystemConfig page fetches live JSONB values from `GET /system-configurations`; expandable cards with active value (JSON prettified) and historical rows. Write path deferred to US-CF04._
 
-**US-CF04** `[GAP]`  
+**US-CF04** `[BUILT]`  
 As **System Admin**, I want to add or update a system configuration value via the admin UI with a future effective date, so that upcoming rule changes are staged without a DB migration.  
-_Gap: System configurations are only writable via seed scripts. No admin UI write path._
+_Endpoint: `POST /system-configurations` (admin scope). Insert-only: new row must have effective_date after current active row; supersedes old row by setting its superseded_date. Validation rejects out-of-order effective dates._
 
-**US-CF05** `[GAP]`  
+**US-CF05** `[BUILT]`  
 As **System Admin**, I want to configure which employment types are valid for this fund, so that payroll submissions with unknown types are rejected.  
-_Gap: `employment_types` config key is seeded; `contract_service.new_hire()` validates against it; but payroll ingestion does not validate employment type against the allowed list._
+_payroll_service.py now loads `employment_types` config once per submission and validates each row's EmploymentRecord.employment_type against the allowlist. Respects fund validation mode (warn → flagged, reject → error). Silently skips if config key not seeded._
 
 **US-CF06** `[GAP]`  
 As **System Admin**, I want to configure which leave types are valid, so that invalid leave type codes are rejected at entry.  
@@ -730,17 +730,16 @@ _Service: `get_1099r_data(tax_year, session)` in report_service.py. Endpoint: `G
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 119 |
+| `[BUILT]` | 124 |
 | `[PARTIAL]` | 1 |
 | `[STUB]` | 3 |
-| `[GAP]` | 42 |
+| `[GAP]` | 37 |
 | **Total** | **165** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
 
 1. **Annual statement template** (US-DG06, US-DG07) — framework ready, templates missing; defer until live payments/year-end
-2. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
-3. **Supporting document attachments** (US-DG12) — needs attachment model (entity_type/entity_id) before portal upload or staff attachment work begins
-4. **Inbound form intake triage** (US-DG13) — FormSubmission table exists; no intake endpoint or routing
-5. **Beneficiary death / survivor annuity termination** (US-S08) — no endpoint or service function
-6. **1099-R PDF generation** (US-RP05 partial) — JSON/CSV built; PDF/pub1220 returns 501; see BACKLOG.md for IRS overlay approach
+2. **1099-R PDF generation** (US-RP05 partial) — JSON/CSV built; PDF/pub1220 returns 501; see BACKLOG.md for IRS overlay approach
+3. **Form ingest parsers** (US-DG13 partial) — intake infrastructure built; per-form-type return_data parsers not yet implemented
+4. **Beneficiary death / survivor annuity termination** — US-S08 now built
+5. **Pilot readiness** — Keycloak config ready; real staff user accounts are an ops task; data import and backup deferred to pilot fund selection

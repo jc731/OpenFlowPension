@@ -62,6 +62,7 @@ class Beneficiary(TimestampMixin, Base):
 
     effective_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    deceased_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     member: Mapped[Member] = orm_relationship(back_populates="beneficiaries", foreign_keys="[Beneficiary.member_id]")
     linked_member: Mapped[Member | None] = orm_relationship(foreign_keys="[Beneficiary.linked_member_id]")

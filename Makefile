@@ -1,7 +1,10 @@
-.PHONY: up down migrate seed test shell preview
+.PHONY: up down migrate seed test shell preview auth-up
 
 up:
 	docker compose up --build
+
+auth-up:
+	docker compose --profile auth up --build
 
 down:
 	docker compose down -v

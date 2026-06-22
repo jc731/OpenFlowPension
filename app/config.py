@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     keycloak_realm: str = "openflow"
     keycloak_audience: str = "openflow-admin"  # must match the Keycloak client ID
 
+    # File attachment storage (relative paths stored in DB; resolved against this dir)
+    attachment_storage_dir: str = "/data/attachments"
+
     @property
     def database_sync_url(self) -> str:
         return self.database_url.replace("+asyncpg", "")

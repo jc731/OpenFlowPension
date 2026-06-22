@@ -69,10 +69,10 @@ All four reports return a typed JSON envelope (`report_type`, `generated_at`, `p
 ## Beta entry checklist
 
 - [x] Phases 1–3 complete (RP01–RP04 shipped; RP05 deferred per plan)
-- [ ] Pilot fund's `system_configurations` reviewed (incl. `concurrent_employment_max_annual_credit`, required at go-live)
-- [ ] Keycloak realm configured for pilot staff (no dev bypass — `environment` ≠ development)
-- [ ] Pilot data loaded via bulk import; seed walkthrough (`scripts/seed_mvp.py`) retired for the pilot instance
-- [ ] Backup story for the Postgres instance
+- [x] Keycloak config complete — realm-export.json seeded with all scopes/roles; docker-compose `auth` profile imports on first start; `make auth-up` to run. Ops step: create real staff user accounts in Keycloak admin UI; set `KEYCLOAK_URL=http://keycloak:8080` + `ENVIRONMENT=production` in `.env`.
+- [ ] Pilot fund's `system_configurations` reviewed (incl. `concurrent_employment_max_annual_credit`, required at go-live); use `POST /system-configurations` to add/update values
+- [ ] Pilot data loaded — defer strategy to fund selection (manual entry via admin UI works for small funds)
+- [ ] Backup story — defer to pilot host decision (managed DB vs. pg_dump cron)
 
 ## Explicitly out of scope for this beta
 

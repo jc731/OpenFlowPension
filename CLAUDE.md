@@ -113,6 +113,8 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | Payment batch + dispatch | `app/services/batch_service.py` | Batch lifecycle: draft→net_pay_applied→dispatched→reconciled; JSON export; webhook POST; NACHA returns 501 |
 | Payment events (GL hooks) | `app/services/payment_events.py` | Append-only `payment_events` table; GL codes from `gl_code_mapping` config key; `GET /accounting/payment-events` |
 | 1099-R report | `app/services/report_service.py` | `get_1099r_data(tax_year)` → json/csv; pdf/pub1220 return 501; `GET /reports/1099r?tax_year=` |
+| Document attachments | `app/services/attachment_service.py` | Filesystem-backed; entity_type + entity_id keyed; ATTACHMENT_STORAGE_DIR config; `POST|GET /attachments/{type}/{id}` |
+| Form submission intake | `app/services/form_submission_service.py` | sent→returned→ingested|expired|cancelled; `POST /form-submissions`, `PATCH /form-submissions/{id}/returned` |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
 **Backlog items:** `docs/BACKLOG.md`  

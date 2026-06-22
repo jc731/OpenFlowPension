@@ -160,6 +160,46 @@ async def get_survivor_benefit(
         raise HTTPException(status_code=422, detail=str(exc))
 
 
+class BeneficiaryDeathRequest(BaseModel):
+    death_date: date
+    note: str | None = None
+
+
+class BeneficiaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    member_id: uuid.UUID
+    beneficiary_type: str
+    first_name: str | None
+    last_name: str | None
+    org_name: str | None
+    relationship: str
+    is_primary: bool
+    effective_date: date
+    end_date: date | None
+    deceased_date: date | None
+
+
+@router.post(
+    "/beneficiaries/{beneficiary_id}/death",
+    response_model=BeneficiaryRead,
+)
+async def record_beneficiary_death(
+    beneficiary_id: uuid.UUID,
+    body: BeneficiaryDeathRequest,
+    session: AsyncSession = Depends(get_session),
+    _: Principal = Depends(require_scope("member:write")),
+):
+    try:
+        async with session.begin():
+            return await survivor_service.terminate_survivor_annuity(
+                beneficiary_id, body.death_date, session, note=body.note
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @router.post(
     "/members/{member_id}/survivor-payments",
     response_model=list[SurvivorPaymentRead],

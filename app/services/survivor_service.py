@@ -241,6 +241,47 @@ async def initiate_survivor_payments(
     return payments
 
 
+# ── Survivor termination ───────────────────────────────────────────────────────
+
+async def terminate_survivor_annuity(
+    beneficiary_id: uuid.UUID,
+    death_date: date,
+    session: AsyncSession,
+    *,
+    note: str | None = None,
+) -> Beneficiary:
+    """Record a beneficiary's death and cancel their pending survivor payments.
+
+    Sets deceased_date + end_date on the beneficiary, then cancels any pending
+    or held survivor_annuity payments tied to this beneficiary. Issued survivor
+    payments are left as-is (the period before death is already disbursed).
+    """
+    bene = await session.get(Beneficiary, beneficiary_id)
+    if bene is None:
+        raise ValueError("Beneficiary not found")
+    if bene.deceased_date is not None:
+        raise ValueError(f"Beneficiary already recorded as deceased on {bene.deceased_date}")
+
+    bene.deceased_date = death_date
+    bene.end_date = death_date
+
+    # Cancel pending/held survivor annuity payments for this beneficiary
+    pending_result = await session.execute(
+        select(BenefitPayment).where(
+            BenefitPayment.beneficiary_id == beneficiary_id,
+            BenefitPayment.payment_type == "survivor_annuity",
+            BenefitPayment.status.in_(["pending", "held"]),
+        )
+    )
+    cancellation_note = note or f"Survivor annuity terminated — beneficiary deceased {death_date}"
+    for payment in pending_result.scalars().all():
+        payment.status = "cancelled"
+        payment.note = cancellation_note
+
+    await session.flush()
+    return bene
+
+
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _validate_option_type(option_type: str) -> None:

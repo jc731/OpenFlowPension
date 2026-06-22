@@ -116,6 +116,7 @@ async def _process_row(
     session: AsyncSession,
     rate_cache: dict | None = None,
     fund_validation_config: dict | None = None,
+    valid_employment_types: list[str] | None = None,
 ) -> None:
     # 1. Member lookup
     member_result = await session.execute(
@@ -164,6 +165,17 @@ async def _process_row(
         return
 
     row.employment_id = employment.id
+
+    # 2a. Employment type validation (fund-configured allowlist)
+    if valid_employment_types and employment.employment_type:
+        if employment.employment_type not in valid_employment_types:
+            existing = list(row.validation_warnings or [])
+            warn = f"employment_type '{employment.employment_type}' is not in fund's allowed list: {valid_employment_types}"
+            row.validation_warnings = existing + [warn]
+            if (fund_validation_config or {}).get("mode") == "reject":
+                row.status = "error"
+                row.error_message = f"Fund validation: {warn}"
+                return
 
     # 2b. Rate variance warnings (non-blocking)
     if rate_cache is not None:
@@ -304,10 +316,21 @@ async def ingest_json(
     # Load fund validation config once per report (None if not seeded)
     fund_validation_config: dict | None = None
     rate_cache: dict | None = None
+    valid_employment_types: list[str] | None = None
     if data.rows:
         try:
             cfg = await get_config("payroll_validation_config", data.rows[0].period_end, session)
             fund_validation_config = cfg.config_value
+        except ConfigNotFoundError:
+            pass
+        try:
+            et_cfg = await get_config("employment_types", data.rows[0].period_end, session)
+            types_value = et_cfg.config_value
+            # employment_types config value is either a list or a dict with a "types" key
+            if isinstance(types_value, list):
+                valid_employment_types = [str(t) for t in types_value]
+            elif isinstance(types_value, dict):
+                valid_employment_types = [str(t) for t in types_value.get("types", [])]
         except ConfigNotFoundError:
             pass
         rate_cache = await build_rate_cache(employer_id, data.rows[0].period_end, session)
@@ -348,7 +371,7 @@ async def ingest_json(
                 row_statuses.append(row.status)
                 continue
 
-        await _process_row(row, employer_id, session, rate_cache=rate_cache, fund_validation_config=fund_validation_config)
+        await _process_row(row, employer_id, session, rate_cache=rate_cache, fund_validation_config=fund_validation_config, valid_employment_types=valid_employment_types)
 
         # Promote applied → flagged when any warnings exist (fund or rate variance)
         all_warnings = row.validation_warnings or []

@@ -31,6 +31,7 @@ import app.models.document            # noqa: F401
 import app.models.service_purchase    # noqa: F401
 import app.models.billing             # noqa: F401
 import app.models.member_name_history  # noqa: F401
+import app.models.attachment           # noqa: F401
 
 TEST_DATABASE_URL = settings.database_url.replace("/openflow_pension", "/openflow_pension_test")
 

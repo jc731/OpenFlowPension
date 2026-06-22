@@ -21,6 +21,8 @@ from app.api.v1.routers.billing import router as billing_router
 from app.api.v1.routers.system_config import router as system_config_router
 from app.api.v1.routers.reports import router as reports_router
 from app.api.v1.routers.accounting import router as accounting_router
+from app.api.v1.routers.attachments import router as attachments_router
+from app.api.v1.routers.form_submissions import router as form_submissions_router
 
 app = FastAPI(
     title="OpenFlow Pension API",
@@ -48,6 +50,8 @@ app.include_router(billing_router, prefix="/api/v1")
 app.include_router(system_config_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(accounting_router, prefix="/api/v1")
+app.include_router(attachments_router, prefix="/api/v1")
+app.include_router(form_submissions_router, prefix="/api/v1")
 
 
 @app.get("/health")

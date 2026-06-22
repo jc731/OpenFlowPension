@@ -20,6 +20,7 @@ from app.models.api_key import ApiKey
 from app.models.document import DocumentTemplate, GeneratedDocument, FormSubmission
 from app.models.service_purchase import ServicePurchaseClaim, ServicePurchasePayment
 from app.models.billing import EmployerContributionRate, EmployerInvoice, EmployerInvoicePayment
+from app.models.attachment import DocumentAttachment
 
 __all__ = [
     "PlanTier", "PlanType", "PlanConfiguration", "SystemConfiguration",
@@ -45,4 +46,5 @@ __all__ = [
     "DocumentTemplate", "GeneratedDocument", "FormSubmission",
     "ServicePurchaseClaim", "ServicePurchasePayment",
     "EmployerContributionRate", "EmployerInvoice", "EmployerInvoicePayment",
+    "DocumentAttachment",
 ]
