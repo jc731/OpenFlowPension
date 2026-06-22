@@ -61,7 +61,8 @@ Models      (app/models/)           ← async SQLAlchemy ORM
 ```
 Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.  
 `"*"` in scopes = all permissions (dev stub only).  
-**Dev bypass:** `environment=development` + no auth header → stub with `scopes=["*"]`. Blocked in production.
+**Dev bypass:** `environment=development` + no auth header → stub with `scopes=["*"]`. Blocked in production.  
+**Keycloak setup:** `make auth-up` starts the auth profile (port 8080); imports `keycloak/realm-export.json` on first run. Set `ENVIRONMENT=production` + `KEYCLOAK_URL`/`KEYCLOAK_REALM`/`KEYCLOAK_AUDIENCE` in `.env` to enable JWT auth. Full setup: `README.md#authentication`.
 
 | Scope | Gates |
 |---|---|

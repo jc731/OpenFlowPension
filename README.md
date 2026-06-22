@@ -115,6 +115,88 @@ docker compose --profile auth --profile deploy up --build -d
 
 ---
 
+## Authentication
+
+OpenFlow supports three auth paths, all handled in `app/api/deps.py`.
+
+### Development (default)
+
+No configuration needed. With `ENVIRONMENT=development` (the default in `.env.example`) and no `Authorization` header, the API applies a **dev-admin bypass** that grants all permissions. Every endpoint is exercisable without tokens.
+
+```bash
+# Works out of the box — no auth header needed
+curl http://localhost:8000/api/v1/members
+```
+
+The admin frontend at `http://localhost:5173` also hits the API unauthenticated in dev mode.
+
+### API keys (always available)
+
+Machine-to-machine integrations use `ofp_` prefixed API keys. They work in any environment with no Keycloak dependency.
+
+```bash
+# Create a key via the API or admin UI
+curl -X POST http://localhost:8000/api/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{"name": "payroll-system", "scopes": ["payroll:write", "member:read"]}'
+
+# The plaintext key is returned once — store it
+# Use it as a Bearer token
+curl http://localhost:8000/api/v1/members \
+  -H "Authorization: Bearer ofp_abc123..."
+```
+
+Keys store only a SHA-256 hash — they cannot be recovered if lost. Rotate via `POST /api-keys/{id}/rotate`.
+
+### Keycloak (production human-user auth)
+
+Keycloak is bundled in the docker-compose stack under the `auth` profile. Start it alongside the main stack:
+
+```bash
+make auth-up    # starts postgres + redis + api + keycloak
+```
+
+Keycloak starts at `http://localhost:8080`. The first start imports `keycloak/realm-export.json`, which pre-configures:
+- Realm: `openflow`
+- Client: `openflow-admin` (public client, direct access grants enabled)
+- All seven OpenFlow scopes as realm roles
+- A default admin user (`admin` / `admin`) — **change this in production**
+
+**After starting Keycloak:**
+
+1. Open `http://localhost:8080` and log in with `admin` / `admin`
+2. Navigate to Realm: `openflow` → Users → Add user — create real staff accounts
+3. Assign roles matching the scopes they need (e.g. `admin` for full access, `member:read` + `payroll:write` for payroll staff)
+
+**Wire the API to Keycloak** by setting these in `.env`:
+
+```env
+ENVIRONMENT=production
+KEYCLOAK_URL=http://keycloak:8080
+KEYCLOAK_REALM=openflow
+KEYCLOAK_AUDIENCE=openflow-admin
+```
+
+With `ENVIRONMENT=production`, the dev bypass is disabled. Every request must carry a valid Bearer token (JWT or `ofp_` API key).
+
+**Scope → Keycloak role mapping:**
+
+| Scope | Who gets it |
+|---|---|
+| `admin` | Maps to `["*"]` — all permissions |
+| `member:read` | View members, payments, service credit |
+| `member:write` | Create/update members, benefit elections |
+| `employment:write` | Employment records, salary changes |
+| `service_credit:write` | Service credit (payroll integrations) |
+| `payroll:write` | Submit payroll reports |
+| `benefit:calculate` | Stateless calc endpoints |
+
+JWT tokens are validated via RS256 against Keycloak's JWKS endpoint. The JWKS is cached for 5 minutes and refreshed automatically on unknown key IDs (handles key rotation without a restart).
+
+**Memory:** Keycloak idles at ~500 MB RAM. On constrained hosts, API keys alone are a viable alternative for machine-to-machine access; human users can be handled by API keys scoped per staff member (less ideal for real production but fine for a small pilot).
+
+---
+
 ## First-run walkthrough
 
 This section walks through a complete scenario using the seeded demo data so you can see the system end-to-end without needing a real member record. No auth header is needed in development — the backend applies a dev-admin bypass automatically.
@@ -238,7 +320,7 @@ Before running production data, a fund will need to:
 3. **Seed `service_credit_accrual_rule`** — with your fund's rule and effective date(s).
 4. **Seed employer records** — one row per contributing employer in `employers`.
 5. **Configure `employment_types` and `leave_types`** — match your fund's classifications.
-6. **Wire Keycloak** — human-user auth is not yet integrated. The dev bypass must not be used in production.
+6. **Configure auth** — disable the dev bypass by setting `ENVIRONMENT=production` in `.env`. See the [Authentication](#authentication) section for Keycloak setup or API-key-only alternatives.
 
 Fund-specific calculation customization is designed to be configuration, not code: adding a second fund means seeding a new `fund_calculation_config` row with overrides, not forking the engine.
 

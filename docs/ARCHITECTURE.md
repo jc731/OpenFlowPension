@@ -241,6 +241,72 @@ Endpoints: `POST /api/v1/api-keys` · `GET /api/v1/api-keys` · `GET /api/v1/api
 
 ---
 
+## Authentication & authorization
+
+Entry point: `app/api/deps.py` → `get_current_user()`. Returns a `Principal` TypedDict:
+```python
+{"id": str, "principal_type": "user" | "api_key", "scopes": list[str]}
+```
+
+### Resolution order
+
+1. **`Bearer ofp_…`** — API key path. SHA-256 hash looked up in `api_keys`. Validates `active` + `expires_at`, updates `last_used_at`. Scopes come from `api_keys.scopes` column.
+
+2. **`Bearer <jwt>`** — Keycloak JWT path. Requires `KEYCLOAK_URL` to be set; rejects with 401 if it isn't.
+
+3. **No header + `environment=development`** — dev-admin stub. Returns `scopes=["*"]`. **Blocked in production** — setting `ENVIRONMENT=production` disables this path entirely.
+
+### Keycloak JWT validation (`app/auth/jwt.py`)
+
+- Fetches JWKS from `{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs` on first use
+- Caches keys for 5 minutes; refreshes automatically on unknown `kid` (handles key rotation without a restart)
+- Validates RS256 signature, `iss` (issuer), and `aud` (audience = `KEYCLOAK_AUDIENCE`) via `PyJWT`
+- **Scope extraction** (`extract_scopes`): reads `realm_access.roles` and all `resource_access.*.roles` from the payload. OpenFlow scope strings are the Keycloak role names. `"admin"` role → `["*"]`.
+
+### Scope table
+
+| Scope | Gates |
+|---|---|
+| `admin` / `"*"` | Everything |
+| `member:read` | View members, payments, service credit |
+| `member:write` | Create/update members, benefit elections |
+| `employment:write` | Employment records, salary changes |
+| `service_credit:write` | Service credit (payroll integrations) |
+| `payroll:write` | Submit payroll reports |
+| `benefit:calculate` | Stateless calc endpoints |
+
+`require_scope("scope")` in `app/api/deps.py` is the gating decorator. `"*"` in scopes bypasses all checks.
+
+### Keycloak setup
+
+**Docker Compose:** Keycloak is under the `auth` profile — not started by `make up`. Start with `make auth-up`.
+
+**Realm import:** `keycloak/realm-export.json` is imported on first start. Pre-configured: realm `openflow`, client `openflow-admin` (public, direct access grants), all seven scopes as realm roles, admin user `admin/admin`.
+
+**Environment variables required for production:**
+```
+ENVIRONMENT=production
+KEYCLOAK_URL=http://keycloak:8080    # or external URL
+KEYCLOAK_REALM=openflow
+KEYCLOAK_AUDIENCE=openflow-admin
+```
+
+**Staff users:** create in Keycloak admin UI (`http://localhost:8080`), assign roles matching scopes needed. No application changes required.
+
+**Memory:** Keycloak idles at ~500 MB. On constrained hosts, API keys alone are a viable pilot alternative.
+
+### API key path
+
+Format: `ofp_` + 64 random hex chars. Only SHA-256 hash stored. `key_prefix` (first 12 chars) stored for display. Plaintext returned once at creation/rotation — cannot be recovered.
+
+Endpoints: `POST /api/v1/api-keys` · `GET /api/v1/api-keys` · `GET /api/v1/api-keys/{id}` · `POST /api/v1/api-keys/{id}/revoke` · `POST /api/v1/api-keys/{id}/rotate`
+
+### `principal_uuid()` helper
+
+`uuid.UUID(principal["id"])` raises in dev mode (id = `"dev-admin"`). Use `principal_uuid(principal)` from `app/api/deps` instead — returns `None` for non-UUID ids, safe for `created_by`/`approved_by` audit columns.
+
+---
+
 ## Admin / LOB frontend
 
 React SPA at `frontend/admin/`. Vite 6, TypeScript, Tailwind v4, shadcn/ui, React Router v7, TanStack Query, sonner, lucide-react.
