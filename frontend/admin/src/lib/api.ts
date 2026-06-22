@@ -488,8 +488,16 @@ export const planConfigApi = {
   get: () => api.get<PlanConfigResponse>('/members/plan-config'),
 }
 
+export interface SystemConfigCreate {
+  config_key: string
+  config_value: Record<string, unknown>
+  effective_date: string
+  note?: string
+}
+
 export const systemConfigApi = {
   list: () => api.get<SystemConfigEntry[]>('/system-configurations'),
+  create: (data: SystemConfigCreate) => api.post<SystemConfigEntry>('/system-configurations', data),
 }
 
 // ── Report types ──────────────────────────────────────────────────────────────

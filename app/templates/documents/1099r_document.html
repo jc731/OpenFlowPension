@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: letter landscape;
+    margin: 0.6in 0.7in 0.8in 0.7in;
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 7.5pt;
+      color: #888;
+    }
+    @bottom-left {
+      content: "{{ fund_name }} · {{ tax_year }} Form 1099-R";
+      font-size: 7.5pt;
+      color: #888;
+    }
+  }
+
+  body {
+    font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #1a1a1a;
+  }
+
+  .report-header {
+    border-bottom: 2pt solid #1a3a5c;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .payer-block { line-height: 1.4; }
+  .payer-name { font-size: 13pt; font-weight: bold; color: #1a3a5c; }
+  .payer-detail { font-size: 8pt; color: #555; }
+
+  .form-title {
+    text-align: right;
+    color: #1a3a5c;
+  }
+  .form-title .form-name { font-size: 16pt; font-weight: bold; }
+  .form-title .form-year { font-size: 11pt; }
+  .form-title .form-sub { font-size: 7.5pt; color: #888; }
+
+  .report-meta {
+    font-size: 8pt;
+    color: #555;
+    margin-bottom: 10pt;
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+  }
+
+  table.data-table th {
+    background: #1a3a5c;
+    color: white;
+    text-align: left;
+    padding: 4pt 6pt;
+    font-weight: bold;
+    font-size: 7.5pt;
+    white-space: nowrap;
+  }
+
+  table.data-table td {
+    padding: 4pt 6pt;
+    border-bottom: 1px solid #e5e5e5;
+    vertical-align: top;
+  }
+
+  table.data-table tr:nth-child(even) td {
+    background: #f7f9fc;
+  }
+
+  .amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .center { text-align: center; }
+  .mono { font-family: DejaVu Sans Mono, Courier New, monospace; font-size: 8pt; }
+
+  .summary-bar {
+    margin-top: 12pt;
+    padding: 8pt 10pt;
+    background: #f0f4f8;
+    border-left: 3pt solid #1a3a5c;
+    font-size: 8.5pt;
+    display: flex;
+    gap: 32pt;
+  }
+
+  .summary-bar .s-item { display: inline-block; }
+  .summary-bar .s-label { color: #555; font-size: 7.5pt; display: block; }
+  .summary-bar .s-val { font-weight: bold; font-size: 10pt; }
+
+  .disclaimer {
+    margin-top: 14pt;
+    font-size: 7pt;
+    color: #999;
+    border-top: 1px solid #ddd;
+    padding-top: 6pt;
+    line-height: 1.4;
+  }
+
+  .no-data {
+    text-align: center;
+    padding: 24pt;
+    color: #888;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <div class="payer-block">
+    <div class="payer-name">{{ fund_name }}</div>
+    {% if fund_address %}<div class="payer-detail">{{ fund_address }}</div>{% endif %}
+    {% if fund_ein %}<div class="payer-detail">EIN: {{ fund_ein }}</div>{% endif %}
+  </div>
+  <div class="form-title">
+    <div class="form-name">Form 1099-R</div>
+    <div class="form-year">Tax Year {{ tax_year }}</div>
+    <div class="form-sub">Distributions From Pensions, Annuities, Retirement or<br>Profit-Sharing Plans, IRAs, Insurance Contracts, etc.</div>
+  </div>
+</div>
+
+<div class="report-meta">
+  Generated {{ generated_at }} · {{ rows | length }} recipient(s) · DRAFT — Not for filing
+</div>
+
+{% if rows %}
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Recipient</th>
+      <th>Member #</th>
+      <th>SSN (last 4)</th>
+      <th class="amount">Box 1 — Gross Distributions</th>
+      <th class="amount">Box 2a — Taxable Amount</th>
+      <th class="amount">Box 4 — Federal Tax Withheld</th>
+      <th class="amount">Box 14 — State Tax Withheld</th>
+      <th class="center">Box 7 — Code</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.last_name }}, {{ row.first_name }}</td>
+      <td class="mono">{{ row.member_number }}</td>
+      <td class="mono center">***-**-{{ row.ssn_last_four }}</td>
+      <td class="amount">{{ row.gross_distributions | currency }}</td>
+      <td class="amount">{{ row.taxable_amount | currency }}</td>
+      <td class="amount">{{ row.federal_tax_withheld | currency }}</td>
+      <td class="amount">{{ row.state_tax_withheld | currency }}</td>
+      <td class="center">{{ row.distribution_code }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="summary-bar">
+  <div class="s-item">
+    <span class="s-label">Recipients</span>
+    <span class="s-val">{{ summary.recipient_count }}</span>
+  </div>
+  <div class="s-item">
+    <span class="s-label">Total Gross Distributions</span>
+    <span class="s-val">{{ summary.total_gross_distributions | currency }}</span>
+  </div>
+  <div class="s-item">
+    <span class="s-label">Total Federal Tax Withheld</span>
+    <span class="s-val">{{ summary.total_federal_withheld | currency }}</span>
+  </div>
+  <div class="s-item">
+    <span class="s-label">Total State Tax Withheld</span>
+    <span class="s-val">{{ summary.total_state_withheld | currency }}</span>
+  </div>
+</div>
+
+{% else %}
+<div class="no-data">No annuity payments found for {{ tax_year }}.</div>
+{% endif %}
+
+<div class="disclaimer">
+  DRAFT — For internal review only. This document is not an official IRS filing. Distribution code 7 = normal distribution from pension/annuity.
+  Taxable amount shown is gross distribution (income exclusion ratio not yet applied). Payer EIN must be verified before filing.
+  Retain recipient copies for records; do not mail this batch summary directly to recipients.
+</div>
+
+</body>
+</html>

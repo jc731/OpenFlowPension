@@ -3,6 +3,7 @@
 Each function runs a single async query (or a small set) and returns a typed
 report schema. No business logic lives here — only read-only SQL aggregation.
 """
+from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -390,3 +391,41 @@ async def get_1099r_data(tax_year: int, session: AsyncSession) -> Form1099RRepor
         ),
         rows=rows,
     )
+
+
+async def render_1099r_pdf(tax_year: int, session: AsyncSession) -> bytes:
+    from app.services.document_renderer import render_to_pdf
+
+    report = await get_1099r_data(tax_year, session)
+
+    try:
+        fund_cfg = await get_config("fund_info", date(tax_year, 12, 31), session)
+        fund_info = fund_cfg.config_value
+    except ConfigNotFoundError:
+        fund_info = {}
+
+    row_dicts = [
+        {
+            "last_name": r.last_name,
+            "first_name": r.first_name,
+            "member_number": r.member_number,
+            "ssn_last_four": r.ssn_last_four,
+            "gross_distributions": r.gross_distributions,
+            "taxable_amount": r.taxable_amount,
+            "federal_tax_withheld": r.federal_tax_withheld,
+            "state_tax_withheld": r.state_tax_withheld,
+            "distribution_code": r.distribution_code,
+        }
+        for r in report.rows
+    ]
+
+    context = {
+        "fund_name": fund_info.get("name", "Pension Fund"),
+        "fund_address": fund_info.get("address"),
+        "fund_ein": fund_info.get("ein"),
+        "tax_year": tax_year,
+        "generated_at": report.generated_at.strftime("%Y-%m-%d %H:%M UTC"),
+        "rows": row_dicts,
+        "summary": report.summary,
+    }
+    return render_to_pdf("1099r_document.html", context)

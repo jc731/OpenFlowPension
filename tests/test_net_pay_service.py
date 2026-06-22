@@ -66,7 +66,7 @@ FEDERAL_CONFIG = {
     },
 }
 
-ILLINOIS_CONFIG = {"tax_year": 2025, "rate": 0.0495}
+STATE_TAX_CONFIG = {"tax_year": 2025, "rate": 0.0495}
 
 # IRS Pub 15-T 2026 — fetched directly from irs.gov/publications/p15t.
 # Structural change from 2025: standard deduction (line 1g) is smaller because a 0% band is
@@ -203,8 +203,8 @@ async def tax_configs(session: AsyncSession):
         effective_date=date(2025, 1, 1),
     ))
     session.add(SystemConfiguration(
-        config_key="illinois_income_tax",
-        config_value=ILLINOIS_CONFIG,
+        config_key="state_income_tax",
+        config_value=STATE_TAX_CONFIG,
         effective_date=date(2025, 1, 1),
     ))
     await session.flush()
@@ -228,7 +228,7 @@ def test_no_deductions_no_tax():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.gross_amount == Decimal("3000")
     assert result.net_amount == Decimal("3000")
@@ -249,7 +249,7 @@ def test_pretax_deduction_reduces_taxable_gross():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.taxable_gross == Decimal("2750")
     assert result.net_amount == Decimal("2750")
@@ -266,7 +266,7 @@ def test_percent_of_gross_deduction():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.posttax_deductions[0].amount == Decimal("30.00")
     assert result.net_amount == Decimal("2970.00")
@@ -288,7 +288,7 @@ def test_federal_basic_single_monthly():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].deduction_type == "federal_tax"
     assert result.tax_withholdings[0].amount == Decimal("190.13")
@@ -309,7 +309,7 @@ def test_federal_step4a_other_income_increases_withholding():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("310.13")
 
@@ -329,7 +329,7 @@ def test_federal_step4b_deductions_decrease_withholding():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("130.13")
 
@@ -348,7 +348,7 @@ def test_federal_step3_dependent_credit_reduces_tax():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("23.46")
 
@@ -364,7 +364,7 @@ def test_federal_step3_credit_cannot_make_withholding_negative():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("0")
 
@@ -384,7 +384,7 @@ def test_federal_step2_multiple_jobs_uses_higher_withholding_table():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     result_no_step2 = calculate_net_pay(
         gross=Decimal("3000"),
@@ -395,7 +395,7 @@ def test_federal_step2_multiple_jobs_uses_higher_withholding_table():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     # Step 2 should produce higher withholding
     assert result_step2.tax_withholdings[0].amount > result_no_step2.tax_withholdings[0].amount
@@ -414,7 +414,7 @@ def test_federal_additional_withholding_added_on_top():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("240.13")
 
@@ -432,7 +432,7 @@ def test_federal_married_filing_jointly():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("50.00")
 
@@ -448,7 +448,7 @@ def test_federal_exempt():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("0")
 
@@ -466,7 +466,7 @@ def test_federal_flat_amount():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("125.00")
 
@@ -482,74 +482,74 @@ def test_federal_legacy_exempt_flag_still_works():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("0")
 
 
-# ── Illinois tax tests ─────────────────────────────────────────────────────────
+# ── State tax tests ────────────────────────────────────────────────────────────
 
-def test_illinois_basic():
+def test_state_tax_basic():
     # 3000 * 0.0495 = 148.50
     result = calculate_net_pay(
         gross=Decimal("3000"),
         deductions=[],
-        tax_elections=[NetPayTaxElectionInput(jurisdiction="illinois", filing_status="single")],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="state", filing_status="single")],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.tax_withholdings[0].amount == Decimal("148.50")
-    assert result.tax_withholdings[0].deduction_type == "illinois_tax"
+    assert result.tax_withholdings[0].deduction_type == "state_tax"
 
 
-def test_illinois_no_state_tax_exempt():
+def test_state_no_state_tax_exempt():
     """withholding_type='exempt' is the explicit 'no state tax' option."""
     result = calculate_net_pay(
         gross=Decimal("3000"),
         deductions=[],
         tax_elections=[NetPayTaxElectionInput(
-            jurisdiction="illinois", filing_status="single",
+            jurisdiction="state", filing_status="single",
             withholding_type="exempt",
         )],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.tax_withholdings[0].amount == Decimal("0")
 
 
-def test_illinois_flat_amount():
+def test_state_tax_flat_amount():
     result = calculate_net_pay(
         gross=Decimal("3000"),
         deductions=[],
         tax_elections=[NetPayTaxElectionInput(
-            jurisdiction="illinois", filing_status="single",
+            jurisdiction="state", filing_status="single",
             withholding_type="flat_amount",
             additional_withholding=Decimal("75"),
         )],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.tax_withholdings[0].amount == Decimal("75.00")
 
 
-def test_illinois_applies_to_taxable_gross_after_pretax():
+def test_state_tax_applies_to_taxable_gross_after_pretax():
     result = calculate_net_pay(
         gross=Decimal("3000"),
         deductions=[NetPayDeductionInput(
             description="Health Insurance", deduction_type="health_insurance",
             amount=Decimal("500"), is_pretax=True,
         )],
-        tax_elections=[NetPayTaxElectionInput(jurisdiction="illinois", filing_status="single")],
+        tax_elections=[NetPayTaxElectionInput(jurisdiction="state", filing_status="single")],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.taxable_gross == Decimal("2500")
     assert result.tax_withholdings[0].amount == Decimal("123.75")
@@ -564,7 +564,7 @@ def test_no_state_election_means_no_state_tax():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.tax_withholdings == []
     assert result.total_taxes == Decimal("0")
@@ -582,7 +582,7 @@ def test_third_party_disbursements_in_own_section():
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=None,
+        state_tax_config=None,
         third_party_disbursements=[ThirdPartyDisbursementInput(
             third_party_entity_id=eid,
             description="Child Support Order #12345",
@@ -617,12 +617,12 @@ def test_third_party_disbursements_reduce_net_after_posttax():
             ),
         ],
         tax_elections=[NetPayTaxElectionInput(
-            jurisdiction="illinois", filing_status="single",
+            jurisdiction="state", filing_status="single",
         )],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=None,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
         third_party_disbursements=[ThirdPartyDisbursementInput(
             third_party_entity_id=__import__("uuid").uuid4(),
             description="Union Dues",
@@ -663,12 +663,12 @@ def test_full_check_stub_all_tiers():
                 jurisdiction="federal", filing_status="single",
                 step_3_dependent_credit=Decimal("500"),
             ),
-            NetPayTaxElectionInput(jurisdiction="illinois", filing_status="single"),
+            NetPayTaxElectionInput(jurisdiction="state", filing_status="single"),
         ],
         payment_date=PAYMENT_DATE,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
         third_party_disbursements=[ThirdPartyDisbursementInput(
             third_party_entity_id=eid,
             description="Garnishment",
@@ -684,7 +684,7 @@ def test_full_check_stub_all_tiers():
     assert result.tax_withholdings[0].deduction_type == "federal_tax"
     assert result.tax_withholdings[0].amount == Decimal("232.46")
     # IL: 3700 × 0.0495 = 183.15
-    assert result.tax_withholdings[1].deduction_type == "illinois_tax"
+    assert result.tax_withholdings[1].deduction_type == "state_tax"
     assert result.tax_withholdings[1].amount == Decimal("183.15")
     assert result.total_posttax_deductions == Decimal("60")
     assert result.total_third_party_disbursements == Decimal("200")
@@ -757,7 +757,7 @@ async def test_preview_w4p_full_formula_from_db(session, payment, member_id, tax
 async def test_preview_w4p_exempt_from_db(session, payment, member_id, tax_configs):
     session.add(TaxWithholdingElection(
         member_id=member_id,
-        jurisdiction="illinois",
+        jurisdiction="state",
         filing_status="single",
         withholding_type="exempt",
         additional_withholding=0,
@@ -774,7 +774,7 @@ async def test_apply_net_pay_persists_all_tiers(
     session, payment, member_id, tax_configs, third_party_entity
 ):
     session.add(TaxWithholdingElection(
-        member_id=member_id, jurisdiction="illinois", filing_status="single",
+        member_id=member_id, jurisdiction="state", filing_status="single",
         withholding_type="formula", additional_withholding=0,
         effective_date=date(2025, 1, 1),
     ))
@@ -790,7 +790,7 @@ async def test_apply_net_pay_persists_all_tiers(
 
     await session.refresh(payment, ["deductions"])
     deduction_types = {d.deduction_type for d in payment.deductions}
-    assert "illinois_tax" in deduction_types
+    assert "state_tax" in deduction_types
     assert "child_support" in deduction_types
     # net = 3000 - 148.50 (IL) - 400 (child support) = 2451.50
     assert float(payment.net_amount) == pytest.approx(2451.50, abs=0.01)
@@ -799,7 +799,7 @@ async def test_apply_net_pay_persists_all_tiers(
 @pytest.mark.asyncio
 async def test_apply_net_pay_idempotency_guard(session, payment, member_id, tax_configs):
     session.add(TaxWithholdingElection(
-        member_id=member_id, jurisdiction="illinois", filing_status="single",
+        member_id=member_id, jurisdiction="state", filing_status="single",
         withholding_type="formula", additional_withholding=0,
         effective_date=date(2025, 1, 1),
     ))
@@ -821,7 +821,7 @@ async def test_stateless_endpoint_w4p_with_disbursement(session, tax_configs, th
         pay_frequency="monthly",
         tax_elections=[
             NetPayTaxElectionInput(
-                jurisdiction="illinois", filing_status="single",
+                jurisdiction="state", filing_status="single",
             )
         ],
         third_party_disbursements=[ThirdPartyDisbursementInput(
@@ -858,7 +858,7 @@ def test_2026_single_3000_monthly():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("178.33")
 
@@ -878,7 +878,7 @@ def test_2026_mfj_3000_monthly():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("31.67")
 
@@ -898,7 +898,7 @@ def test_2026_mfj_2000_monthly_falls_in_zero_percent_band():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("0.00")
 
@@ -918,7 +918,7 @@ def test_2026_single_5000_monthly():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("418.33")
 
@@ -941,7 +941,7 @@ def test_2026_single_3000_step2_checked():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("292.08")
 
@@ -964,7 +964,7 @@ def test_2026_mfj_3000_step2_checked():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert result.tax_withholdings[0].amount == Decimal("178.33")
 
@@ -979,7 +979,7 @@ def test_tax_withholding_federal_formula_returns_worksheet_steps():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     assert len(result.withholdings) == 1
     w = result.withholdings[0]
@@ -1017,7 +1017,7 @@ def test_tax_withholding_step4_adjustments_flow_through_worksheet():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     w = result.withholdings[0]
     assert w.annualized_gross == Decimal("48000")
@@ -1040,7 +1040,7 @@ def test_tax_withholding_exempt_returns_zero_with_no_worksheet():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     w = result.withholdings[0]
     assert w.total_withheld == Decimal("0")
@@ -1059,7 +1059,7 @@ def test_tax_withholding_flat_amount_no_worksheet():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=None,
+        state_tax_config=None,
     )
     w = result.withholdings[0]
     assert w.total_withheld == Decimal("150.00")
@@ -1067,24 +1067,24 @@ def test_tax_withholding_flat_amount_no_worksheet():
     assert w.annualized_gross is None
 
 
-def test_tax_withholding_federal_and_illinois_combined():
+def test_tax_withholding_federal_and_state_combined():
     result = compute_tax_withholding(
         gross=Decimal("3000"),
         elections=[
             NetPayTaxElectionInput(jurisdiction="federal", filing_status="single"),
-            NetPayTaxElectionInput(jurisdiction="illinois", filing_status="single"),
+            NetPayTaxElectionInput(jurisdiction="state", filing_status="single"),
         ],
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert len(result.withholdings) == 2
     fed = result.withholdings[0]
-    il = result.withholdings[1]
+    state = result.withholdings[1]
     assert fed.total_withheld == Decimal("178.33")
-    assert il.total_withheld == Decimal("148.50")
-    assert il.annualized_gross is None  # Illinois detail not shown; flat rate only
+    assert state.total_withheld == Decimal("148.50")
+    assert state.annualized_gross is None  # state detail not shown; flat rate only
     assert result.total_withheld == Decimal("326.83")
 
 
@@ -1095,7 +1095,7 @@ def test_tax_withholding_no_elections_returns_empty():
         payment_date=PAYMENT_DATE_2026,
         pay_frequency="monthly",
         federal_tax_config=FEDERAL_CONFIG_2026,
-        illinois_tax_config=ILLINOIS_CONFIG,
+        state_tax_config=STATE_TAX_CONFIG,
     )
     assert result.withholdings == []
     assert result.total_withheld == Decimal("0")
@@ -1109,7 +1109,7 @@ async def test_tax_withholding_stateless_endpoint(session, tax_configs):
         pay_frequency="monthly",
         elections=[
             NetPayTaxElectionInput(jurisdiction="federal", filing_status="single"),
-            NetPayTaxElectionInput(jurisdiction="illinois", filing_status="single"),
+            NetPayTaxElectionInput(jurisdiction="state", filing_status="single"),
         ],
     )
     result = await compute_tax_withholding_stateless(req, session)

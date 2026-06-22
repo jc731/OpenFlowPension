@@ -227,3 +227,32 @@ The IRS publishes official fillable PDFs for forms like W-4P, 1099-R, and W-2. R
 **Architecture note:** This approach replaces WeasyPrint for IRS-form documents; the existing HTML-template path remains for fund-generated letters (approval letters, billing notices, etc.). The two paths can coexist — add an `overlay_pdf` renderer alongside `render_to_pdf` in the document framework.
 
 **When to build:** Prioritize before first year-end with live annuity payments. 1099-R batch export (US-RP05) depends on this.
+
+---
+
+## Project website — marketing + documentation hub
+
+OpenFlow Pension needs a public-facing web presence for two distinct purposes:
+
+**Marketing / project identity:**
+- What the platform is, who it's for (public pension funds, municipal/state plan administrators)
+- Feature highlights (benefit calc, payroll ingestion, document generation, ESS/MSS portals, open-source/Apache 2.0 + Commons Clause)
+- Comparison with proprietary legacy admin systems
+- Contact / pilot inquiry form
+
+**Documentation hub (how-to / README formalization):**
+- Getting started guide: prerequisites, `make up` / `make migrate` / `make seed`, first API call
+- Architecture overview (distilled from `docs/ARCHITECTURE.md` into readable prose)
+- Deployment guide: Docker Compose for dev, production deployment patterns, Keycloak setup, environment variables
+- API reference (could link to auto-generated `/docs` OpenAPI UI or embed a static snapshot)
+- Contribution guide
+
+**Recommended stack:** Astro SSG + Tailwind (consistent with other projects in this workspace). Static output → Netlify deploy. Source lives at `site/` inside this repo or a separate `openflowpension.org` repo.
+
+**Content priority order:**
+1. README formalization (getting-started + architecture) — useful immediately for pilot onboarding
+2. Deployment guide — needed before any self-hosted pilot
+3. Marketing landing page — needed when seeking additional pilot funds or announcing publicly
+4. Full docs hub — ongoing; can be incremental
+
+**When to build:** README formalization should happen before or alongside the first pilot. Marketing site should be live before any public announcement or outreach to additional funds.

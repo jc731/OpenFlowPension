@@ -88,10 +88,17 @@ async def form_1099r(
     format: str = Query("json", description="json | csv | pdf | pub1220"),
     session: AsyncSession = Depends(get_session),
 ):
-    if format not in ("json", "csv"):
+    if format not in ("json", "csv", "pdf"):
         raise HTTPException(
             status_code=501,
-            detail=f"1099-R format '{format}' is not yet implemented. See BACKLOG.md for IRS overlay approach.",
+            detail=f"1099-R format '{format}' is not yet implemented.",
+        )
+    if format == "pdf":
+        pdf_bytes = await report_service.render_1099r_pdf(tax_year, session)
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=1099r_{tax_year}.pdf"},
         )
     report = await report_service.get_1099r_data(tax_year, session)
     if format == "csv":

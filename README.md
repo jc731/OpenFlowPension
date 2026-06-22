@@ -203,7 +203,7 @@ This section walks through a complete scenario using the seeded demo data so you
 
 ### The scenario
 
-`make seed` loads **Jane Smith** — a 25-year Tier I Traditional member at State University of Illinois. The seed covers:
+`make seed` loads **Jane Smith** — a 25-year Tier I Traditional member at Lakewood City Government. The seed covers:
 
 - Member record with certification date, plan choice (Tier I / Traditional), and beneficiary (spouse Robert Smith)
 - 25 years of employment + salary history
@@ -289,7 +289,7 @@ All fund-specific rules live in the `system_configurations` table as JSONB, look
 | `leave_types` | Whitelist of valid leave type strings |
 | `fund_calculation_config` | All benefit calculation parameters (tier cutoffs, FAE windows, formula bands, cap tables, COLA rules) |
 | `federal_income_tax_withholding` | IRS Pub 15-T percentage method tables (seeded for 2025 and 2026) |
-| `illinois_income_tax` | State flat income tax rate |
+| `state_income_tax` | State flat income tax rate |
 | `fund_info` | Fund name, address, phone, website — used for document letterheads |
 
 To inspect current config values:
@@ -301,7 +301,7 @@ Adding a new effective-dated rule (example: switch accrual rule):
 ```
 POST /api/v1/system-configurations
 {
-  "key": "service_credit_accrual_rule",
+  "config_key": "service_credit_accrual_rule",
   "config_value": {"rule": "monthly_floor"},
   "effective_date": "2024-09-01"
 }
@@ -346,15 +346,17 @@ See `LICENSE` for the full text.
 
 ## Contributing
 
-Contributions are welcome. Before opening a pull request on a significant feature, open an issue to discuss scope and approach. See `CONTRIBUTING.md` for standards, commit conventions, and the module architecture overview.
+Contributions are welcome. Before opening a pull request on a significant feature, open an issue to discuss scope and approach. See `CONTRIBUTING.md` for standards, commit conventions, and the module architecture overview. See also `docs/DEVELOPER_GUIDE.md` for the step-by-step recipe for adding a module (model → service → router → test).
 
 ---
 
 ## Status
 
-Working toward a staff-facing pilot beta. The backend is essentially feature-complete for core administration: benefit calculation, payroll ingestion with validation, payment disbursement, net pay / W-4P withholding, retirement cases, survivor benefits, service purchase, employer billing, document generation, and auth (Keycloak JWT + API keys). The admin frontend covers members, employers, payroll, retirement cases, config, and API keys — several backend modules don't have UI pages yet.
+Beta-ready for a staff-facing pilot. The backend is feature-complete for core administration: benefit calculation, payroll ingestion with three-level validation, payment disbursement, net pay / W-4P withholding, retirement cases, survivor benefits, service purchase, employer billing, document generation, and auth (Keycloak JWT + API keys). The admin frontend covers members, employers, payroll, retirement cases, reporting, system config, and API keys.
 
-The road to beta — remaining UI pages, member search and bulk import, and operational reports — is laid out in [`docs/BETA_PLAN.md`](docs/BETA_PLAN.md). Story-level coverage is tracked in [`tests/USER_STORIES.md`](tests/USER_STORIES.md). The member portal is a later, separate phase. Not production-ready.
+Two operational steps remain before onboarding a pilot fund: seeding the fund's `system_configurations` rows (contribution rates, accrual rule, employment types) and loading member data. The member portal is a later, separate phase. Not production-ready.
+
+Story-level coverage is tracked in [`tests/USER_STORIES.md`](tests/USER_STORIES.md). Phased delivery history: [`docs/BETA_PLAN.md`](docs/BETA_PLAN.md). Deferred features: [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ---
 

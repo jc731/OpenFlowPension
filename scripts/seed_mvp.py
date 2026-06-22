@@ -212,15 +212,15 @@ async def seed():
                 ),
                 # ── Illinois income tax — flat rate ───────────────────────────
                 dict(
-                    config_key="illinois_income_tax",
+                    config_key="state_income_tax",
                     config_value={
                         "tax_year": 2025,
                         "rate": 0.0495,
-                        "description": "Illinois flat income tax rate effective 2017-07-01",
+                        "description": "State flat income tax rate",
                     },
                     effective_date=date(2025, 1, 1),
                     superseded_date=None,
-                    note="IL flat rate 4.95%",
+                    note="State flat rate 4.95% (demo value)",
                 ),
                 # ── Fund identity ─────────────────────────────────────────────
                 dict(
@@ -255,7 +255,7 @@ async def seed():
                 # ── Employment and leave type allowlists ──────────────────────
                 dict(
                     config_key="employment_types",
-                    config_value={"types": ["general_staff", "academic", "police_fire", "other"]},
+                    config_value={"types": ["general_staff", "part_time", "police_fire", "other"]},
                     effective_date=date(2000, 1, 1),
                     superseded_date=None,
                     note="Valid employment_type values accepted by contract_service",
@@ -386,8 +386,8 @@ async def seed():
             # ── Employer ──────────────────────────────────────────────────────
             employer, _ = await get_or_create(
                 session, Employer,
-                {"employer_code": "SUIL-001"},
-                {"name": "State University of Illinois", "employer_type": "university"},
+                {"employer_code": "DEMO-001"},
+                {"name": "Lakewood City Government", "employer_type": "municipality"},
             )
 
             # ── Member: Jane Smith ────────────────────────────────────────────
@@ -601,6 +601,7 @@ async def seed():
         total_years = sum(float(e.credit_years or 0) for e in entries)
 
         print(f"\nSeeded Jane Smith (id: {member.id})")
+        print(f"Employer: Lakewood City Government")
         print(f"Total service credit years: {total_years:.4f}")
         print(f"Expected: ~25.0 years\n")
 

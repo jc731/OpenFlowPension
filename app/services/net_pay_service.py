@@ -202,15 +202,15 @@ def _compute_federal_withholding(
     return _federal_formula_steps(gross, election, pay_periods, config).total_withheld
 
 
-def _illinois_formula_steps(
+def _state_formula_steps(
     gross: Decimal,
     election: NetPayTaxElectionInput,
     config: dict[str, Any],
 ) -> TaxWithholdingLineItem:
     extra = Decimal(str(election.additional_withholding)).quantize(_TWO, rounding=ROUND_HALF_UP)
-    total = _compute_illinois_withholding(gross, election, config)
+    total = _compute_state_withholding(gross, election, config)
     return TaxWithholdingLineItem(
-        jurisdiction="illinois",
+        jurisdiction="state",
         filing_status=election.filing_status,
         withholding_type=election.withholding_type if not election.exempt else "exempt",
         additional_withholding=extra,
@@ -218,7 +218,7 @@ def _illinois_formula_steps(
     )
 
 
-def _compute_illinois_withholding(
+def _compute_state_withholding(
     taxable_gross: Decimal,
     election: NetPayTaxElectionInput,
     config: dict[str, Any],
@@ -244,7 +244,7 @@ def calculate_net_pay(
     payment_date: date,
     pay_frequency: PayFrequency,
     federal_tax_config: dict[str, Any] | None,
-    illinois_tax_config: dict[str, Any] | None,
+    state_tax_config: dict[str, Any] | None,
     third_party_disbursements: list[ThirdPartyDisbursementInput] | None = None,
     third_party_names: dict[uuid.UUID, str] | None = None,
 ) -> NetPayResult:
@@ -288,14 +288,14 @@ def calculate_net_pay(
                 deduction_type="federal_tax",
                 is_pretax=False,
             ))
-        elif j == "illinois":
-            if illinois_tax_config is None:
-                raise ConfigNotFoundError("illinois_income_tax config not found")
-            amt = _compute_illinois_withholding(taxable_gross, election, illinois_tax_config)
+        elif j == "state":
+            if state_tax_config is None:
+                raise ConfigNotFoundError("state_income_tax config not found")
+            amt = _compute_state_withholding(taxable_gross, election, state_tax_config)
             tax_lines.append(NetPayLineItem(
-                description="Illinois State Income Tax",
+                description="State Income Tax",
                 amount=amt,
-                deduction_type="illinois_tax",
+                deduction_type="state_tax",
                 is_pretax=False,
             ))
         # Additional jurisdictions: extend here
@@ -349,7 +349,7 @@ def compute_tax_withholding(
     payment_date: date,
     pay_frequency: PayFrequency,
     federal_tax_config: dict[str, Any] | None,
-    illinois_tax_config: dict[str, Any] | None,
+    state_tax_config: dict[str, Any] | None,
 ) -> TaxWithholdingResult:
     """Pure function — no DB access.
 
@@ -370,10 +370,10 @@ def compute_tax_withholding(
             if federal_tax_config is None:
                 raise ConfigNotFoundError("federal_income_tax_withholding config not found")
             lines.append(_federal_formula_steps(gross, election, pay_periods, federal_tax_config))
-        elif j == "illinois":
-            if illinois_tax_config is None:
-                raise ConfigNotFoundError("illinois_income_tax config not found")
-            lines.append(_illinois_formula_steps(gross, election, illinois_tax_config))
+        elif j == "state":
+            if state_tax_config is None:
+                raise ConfigNotFoundError("state_income_tax config not found")
+            lines.append(_state_formula_steps(gross, election, state_tax_config))
 
     total = (sum(l.total_withheld for l in lines) or Decimal("0")).quantize(_TWO, rounding=ROUND_HALF_UP)
     return TaxWithholdingResult(
@@ -391,14 +391,14 @@ async def compute_tax_withholding_stateless(
     session: AsyncSession,
 ) -> TaxWithholdingResult:
     """Load tax configs from DB then delegate to the pure compute_tax_withholding()."""
-    federal_cfg, illinois_cfg = await _load_tax_configs(req.payment_date, session)
+    federal_cfg, state_cfg = await _load_tax_configs(req.payment_date, session)
     return compute_tax_withholding(
         gross=Decimal(str(req.gross_amount)),
         elections=req.elections,
         payment_date=req.payment_date,
         pay_frequency=req.pay_frequency,
         federal_tax_config=federal_cfg,
-        illinois_tax_config=illinois_cfg,
+        state_tax_config=state_cfg,
     )
 
 
@@ -409,18 +409,18 @@ async def _load_tax_configs(
     session: AsyncSession,
 ) -> tuple[dict | None, dict | None]:
     federal = None
-    illinois = None
+    state_tax = None
     try:
         row = await get_config("federal_income_tax_withholding", payment_date, session)
         federal = row.config_value
     except ConfigNotFoundError:
         pass
     try:
-        row = await get_config("illinois_income_tax", payment_date, session)
-        illinois = row.config_value
+        row = await get_config("state_income_tax", payment_date, session)
+        state_tax = row.config_value
     except ConfigNotFoundError:
         pass
-    return federal, illinois
+    return federal, state_tax
 
 
 async def _resolve_third_party_names(
@@ -529,7 +529,7 @@ async def get_net_pay_preview(
 
     deductions, disbursements = await _load_active_orders(payment, session)
     elections = await _build_tax_election_inputs(payment, session)
-    federal_cfg, illinois_cfg = await _load_tax_configs(payment.payment_date, session)
+    federal_cfg, state_cfg = await _load_tax_configs(payment.payment_date, session)
 
     all_entity_ids = [d.third_party_entity_id for d in disbursements]
     names = await _resolve_third_party_names(all_entity_ids, session)
@@ -541,7 +541,7 @@ async def get_net_pay_preview(
         payment_date=payment.payment_date,
         pay_frequency="monthly",
         federal_tax_config=federal_cfg,
-        illinois_tax_config=illinois_cfg,
+        state_tax_config=state_cfg,
         third_party_disbursements=disbursements,
         third_party_names=names,
     )
@@ -570,7 +570,7 @@ async def apply_net_pay(
 
     deductions, disbursements = await _load_active_orders(payment, session)
     elections = await _build_tax_election_inputs(payment, session)
-    federal_cfg, illinois_cfg = await _load_tax_configs(payment.payment_date, session)
+    federal_cfg, state_cfg = await _load_tax_configs(payment.payment_date, session)
 
     all_entity_ids = [d.third_party_entity_id for d in disbursements]
     names = await _resolve_third_party_names(all_entity_ids, session)
@@ -582,7 +582,7 @@ async def apply_net_pay(
         payment_date=payment.payment_date,
         pay_frequency="monthly",
         federal_tax_config=federal_cfg,
-        illinois_tax_config=illinois_cfg,
+        state_tax_config=state_cfg,
         third_party_disbursements=disbursements,
         third_party_names=names,
     )
@@ -626,7 +626,7 @@ async def calculate_net_pay_stateless(
     session: AsyncSession,
 ) -> NetPayResult:
     """Load tax configs from DB then delegate to the pure calculate_net_pay()."""
-    federal_cfg, illinois_cfg = await _load_tax_configs(req.payment_date, session)
+    federal_cfg, state_cfg = await _load_tax_configs(req.payment_date, session)
 
     all_entity_ids = [d.third_party_entity_id for d in req.third_party_disbursements]
     names = await _resolve_third_party_names(all_entity_ids, session)
@@ -638,7 +638,7 @@ async def calculate_net_pay_stateless(
         payment_date=req.payment_date,
         pay_frequency=req.pay_frequency,
         federal_tax_config=federal_cfg,
-        illinois_tax_config=illinois_cfg,
+        state_tax_config=state_cfg,
         third_party_disbursements=req.third_party_disbursements,
         third_party_names=names,
     )
