@@ -439,13 +439,13 @@ _Tests: test_payment_service.py_
 As **Fund Staff**, I want to add and manage bank accounts for a member (routing, encrypted account number, checking/savings, primary flag), so that ACH disbursements are routed correctly.  
 _Tests: test_payment_service.py_
 
-**US-PY08** `[GAP]`  
+**US-PY08** `[BUILT]`  
 As **Fund Staff**, I want to reverse a payment and create a correcting payment, so that errors discovered after disbursement can be corrected with a full audit trail.  
-_Gap: `status=reversed` exists on BenefitPayment; no service function or endpoint to perform the reversal + replacement flow atomically._
+_Service: `reverse_payment(payment_id, reason, session)` in payment_service.py. Endpoint: `POST /payments/{id}/reverse`. Sets status=reversed + records reason. Staff creates a new payment separately. Tests: test_batch_service.py_
 
-**US-PY09** `[GAP]`  
+**US-PY09** `[BUILT]`  
 As **Fund Staff**, I want to run a monthly payment batch that creates and issues all recurring annuity payments, so that I don't have to create each payment manually.  
-_Gap: No batch payment creation service function or endpoint. Each payment is created individually._
+_Service: batch_service.py — create_batch → apply_net_pay_to_batch → dispatch_batch (json/webhook; nacha returns 501) → reconcile_batch. PaymentBatch + PaymentEvent tables. Accounting hook: payment_events table with GL code lookup from `gl_code_mapping` config key. Export: `GET /payments/batches/{id}/export?format=json`. Accounting events: `GET /accounting/payment-events`. Tests: test_batch_service.py_
 
 **US-PY10** `[BUILT]`  
 As **Fund Staff**, I want to generate and send a monthly check stub to each annuitant, so that they have a record of their gross amount, deductions, and net pay.  
@@ -720,8 +720,9 @@ _Phase 3: current-snapshot member count grouped by status._
 As **Fund Staff**, I want to export a list of all annuitants with their monthly payment amounts, for actuarial review and financial planning.  
 _Phase 3: annuitants with approved/active retirement case benefit amounts._
 
-**US-RP05** `[GAP]`  
-As **System Admin**, I want to export a 1099-R batch file for all annuitants at year-end, so that tax forms can be generated and mailed.
+**US-RP05** `[BUILT]`  
+As **System Admin**, I want to export a 1099-R batch file for all annuitants at year-end, so that tax forms can be generated and mailed.  
+_Service: `get_1099r_data(tax_year, session)` in report_service.py. Endpoint: `GET /reports/1099r?tax_year=2025&format=json|csv`. pdf and pub1220 formats return 501 (see BACKLOG.md for IRS overlay approach). Groups issued annuity payments by member, sums federal/state withholding deductions. Distribution code 7 (normal distribution)._
 
 ---
 
@@ -729,17 +730,17 @@ As **System Admin**, I want to export a 1099-R batch file for all annuitants at 
 
 | Status | Count |
 |---|---|
-| `[BUILT]` | 116 |
+| `[BUILT]` | 119 |
 | `[PARTIAL]` | 1 |
 | `[STUB]` | 3 |
-| `[GAP]` | 45 |
+| `[GAP]` | 42 |
 | **Total** | **165** |
 
 ### Highest-Priority Gaps (engine is built, gap is in surface area)
 
-1. **Annual statement + 1099-R templates** (US-DG06, US-DG07) — framework ready, templates missing; defer until live payments/year-end
-2. **Payment batch + reversal workflows** (US-PY08, US-PY09) — model supports it, no service function
-3. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
-4. **Supporting document attachments** (US-DG12) — needs attachment model (entity_type/entity_id) before portal upload or staff attachment work begins
-5. **Inbound form intake triage** (US-DG13) — FormSubmission table exists; no intake endpoint or routing
-6. **Beneficiary death / survivor annuity termination** (US-S08) — no endpoint or service function
+1. **Annual statement template** (US-DG06, US-DG07) — framework ready, templates missing; defer until live payments/year-end
+2. **System config admin UI write path** (US-CF04) — read-only view complete; write endpoint not built
+3. **Supporting document attachments** (US-DG12) — needs attachment model (entity_type/entity_id) before portal upload or staff attachment work begins
+4. **Inbound form intake triage** (US-DG13) — FormSubmission table exists; no intake endpoint or routing
+5. **Beneficiary death / survivor annuity termination** (US-S08) — no endpoint or service function
+6. **1099-R PDF generation** (US-RP05 partial) — JSON/CSV built; PDF/pub1220 returns 501; see BACKLOG.md for IRS overlay approach

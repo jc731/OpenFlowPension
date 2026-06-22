@@ -127,3 +127,41 @@ class AnnuitantReport(BaseModel):
     parameters: dict
     summary: AnnuitantSummary
     rows: list[AnnuitantRow]
+
+
+# ── 1099-R (RP05) ─────────────────────────────────────────────────────────────
+
+class Form1099RRecord(BaseModel):
+    member_id: uuid.UUID
+    member_number: str
+    first_name: str
+    last_name: str
+    ssn_last_four: str
+    # Box 1: gross distributions (all annuity payments issued in tax_year)
+    gross_distributions: Decimal
+    # Box 2a: taxable amount (gross minus any non-taxable exclusion — stub: same as gross)
+    taxable_amount: Decimal
+    # Box 4: federal income tax withheld
+    federal_tax_withheld: Decimal
+    # Box 14/16: state income tax withheld
+    state_tax_withheld: Decimal
+    # IRS distribution code (7 = normal distribution for annuity)
+    distribution_code: str
+    payer_name: str
+    payer_ein: str | None
+
+
+class Form1099RSummary(BaseModel):
+    tax_year: int
+    recipient_count: int
+    total_gross_distributions: Decimal
+    total_federal_withheld: Decimal
+    total_state_withheld: Decimal
+
+
+class Form1099RReport(BaseModel):
+    report_type: str = "1099r"
+    generated_at: datetime
+    parameters: dict
+    summary: Form1099RSummary
+    rows: list[Form1099RRecord]

@@ -10,7 +10,7 @@ from app.models.salary import SalaryHistory
 from app.models.leave import LeaveType, LeaveBalance
 from app.models.service_credit import ServiceCreditEntry
 from app.models.bank_account import MemberBankAccount
-from app.models.payment import BenefitPayment, PaymentDeduction, DeductionOrder, TaxWithholdingElection
+from app.models.payment import BenefitPayment, PaymentDeduction, DeductionOrder, TaxWithholdingElection, PaymentBatch, PaymentEvent
 from app.models.payroll import PayrollReport, PayrollReportRow, ContributionRecord
 from app.models.member_status import MemberStatusHistory
 from app.models.leave_period import LeavePeriod
@@ -33,7 +33,7 @@ __all__ = [
     "LeaveType", "LeaveBalance",
     "ServiceCreditEntry",
     "MemberBankAccount",
-    "BenefitPayment", "PaymentDeduction", "DeductionOrder", "TaxWithholdingElection",
+    "BenefitPayment", "PaymentDeduction", "DeductionOrder", "TaxWithholdingElection", "PaymentBatch", "PaymentEvent",
     "PayrollReport", "PayrollReportRow", "ContributionRecord",
     "MemberStatusHistory",
     "LeavePeriod",

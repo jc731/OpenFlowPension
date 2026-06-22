@@ -260,3 +260,24 @@ async def update_payment_status(
         payment.issued_at = datetime.now(timezone.utc)
     await session.flush()
     return payment
+
+
+async def reverse_payment(
+    payment_id: uuid.UUID,
+    reason: str,
+    session: AsyncSession,
+    *,
+    reversed_by: uuid.UUID | None = None,
+) -> BenefitPayment:
+    """Mark a payment as reversed. Corrections require creating a new payment afterward."""
+    payment = await session.get(BenefitPayment, payment_id)
+    if not payment:
+        raise ValueError("Payment not found")
+    if payment.status == "reversed":
+        raise ValueError("Payment is already reversed")
+    if payment.status == "cancelled":
+        raise ValueError("Cannot reverse a cancelled payment")
+    payment.status = "reversed"
+    payment.note = reason
+    await session.flush()
+    return payment

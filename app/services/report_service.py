@@ -15,6 +15,7 @@ from app.models.billing import EmployerInvoice
 from app.models.employer import Employer
 from app.models.employment import EmploymentRecord
 from app.models.member import Member
+from app.models.payment import BenefitPayment, PaymentDeduction
 from app.models.payroll import ContributionRecord
 from app.models.retirement_case import RetirementCase
 from app.schemas.reports import (
@@ -27,10 +28,14 @@ from app.schemas.reports import (
     DelinquencyReport,
     DelinquencyRow,
     DelinquencySummary,
+    Form1099RRecord,
+    Form1099RReport,
+    Form1099RSummary,
     MembershipCountReport,
     MembershipCountRow,
     MembershipCountSummary,
 )
+from app.services.config_service import ConfigNotFoundError, get_config
 
 
 # ── RP01: Contribution Reconciliation ─────────────────────────────────────────
@@ -247,6 +252,141 @@ async def annuitants(
             total_annuitants=len(rows),
             annuitants_with_approved_case=with_case,
             total_monthly_outlay=total_monthly,
+        ),
+        rows=rows,
+    )
+
+
+# ── RP05: 1099-R ──────────────────────────────────────────────────────────────
+
+async def get_1099r_data(tax_year: int, session: AsyncSession) -> Form1099RReport:
+    year_start = date(tax_year, 1, 1)
+    year_end = date(tax_year, 12, 31)
+
+    # Sum gross amounts per member for issued annuity payments in the tax year
+    gross_stmt = (
+        select(
+            BenefitPayment.member_id,
+            func.sum(BenefitPayment.gross_amount).label("total_gross"),
+        )
+        .where(
+            BenefitPayment.payment_type == "annuity",
+            BenefitPayment.status == "issued",
+            BenefitPayment.payment_date >= year_start,
+            BenefitPayment.payment_date <= year_end,
+        )
+        .group_by(BenefitPayment.member_id)
+    )
+    gross_result = await session.execute(gross_stmt)
+    gross_by_member: dict[uuid.UUID, Decimal] = {
+        r.member_id: Decimal(str(r.total_gross)) for r in gross_result.fetchall()
+    }
+
+    if not gross_by_member:
+        try:
+            fund_info = await get_config("fund_info", year_end, session)
+        except ConfigNotFoundError:
+            fund_info = {}
+        return Form1099RReport(
+            generated_at=datetime.now(timezone.utc),
+            parameters={"tax_year": tax_year},
+            summary=Form1099RSummary(
+                tax_year=tax_year,
+                recipient_count=0,
+                total_gross_distributions=Decimal("0"),
+                total_federal_withheld=Decimal("0"),
+                total_state_withheld=Decimal("0"),
+            ),
+            rows=[],
+        )
+
+    member_ids = list(gross_by_member.keys())
+
+    # Sum federal and state withholding deductions for the same payments
+    deduction_stmt = (
+        select(
+            BenefitPayment.member_id,
+            PaymentDeduction.deduction_type,
+            func.sum(PaymentDeduction.amount).label("total_withheld"),
+        )
+        .join(PaymentDeduction, PaymentDeduction.payment_id == BenefitPayment.id)
+        .where(
+            BenefitPayment.payment_type == "annuity",
+            BenefitPayment.status == "issued",
+            BenefitPayment.payment_date >= year_start,
+            BenefitPayment.payment_date <= year_end,
+            BenefitPayment.member_id.in_(member_ids),
+            PaymentDeduction.deduction_type.in_(["federal_tax", "state_tax"]),
+        )
+        .group_by(BenefitPayment.member_id, PaymentDeduction.deduction_type)
+    )
+    deduction_result = await session.execute(deduction_stmt)
+
+    federal_by_member: dict[uuid.UUID, Decimal] = {}
+    state_by_member: dict[uuid.UUID, Decimal] = {}
+    for r in deduction_result.fetchall():
+        amt = Decimal(str(r.total_withheld))
+        if r.deduction_type == "federal_tax":
+            federal_by_member[r.member_id] = amt
+        else:
+            state_by_member[r.member_id] = amt
+
+    # Load member demographics
+    member_stmt = (
+        select(
+            Member.id,
+            Member.member_number,
+            Member.first_name,
+            Member.last_name,
+            Member.ssn_last_four,
+        )
+        .where(Member.id.in_(member_ids))
+        .order_by(Member.last_name, Member.first_name)
+    )
+    member_result = await session.execute(member_stmt)
+    members = {r.id: r for r in member_result.fetchall()}
+
+    try:
+        fund_info = await get_config("fund_info", year_end, session)
+    except ConfigNotFoundError:
+        fund_info = {}
+
+    payer_name = fund_info.get("name", "Fund")
+    payer_ein = fund_info.get("ein")
+
+    rows: list[Form1099RRecord] = []
+    for member_id, gross in gross_by_member.items():
+        m = members.get(member_id)
+        if m is None:
+            continue
+        federal = federal_by_member.get(member_id, Decimal("0"))
+        state = state_by_member.get(member_id, Decimal("0"))
+        rows.append(Form1099RRecord(
+            member_id=member_id,
+            member_number=m.member_number,
+            first_name=m.first_name,
+            last_name=m.last_name,
+            ssn_last_four=m.ssn_last_four,
+            gross_distributions=gross,
+            taxable_amount=gross,  # stub: no tax-exclusion calc yet
+            federal_tax_withheld=federal,
+            state_tax_withheld=state,
+            distribution_code="7",  # normal distribution
+            payer_name=payer_name,
+            payer_ein=payer_ein,
+        ))
+
+    rows.sort(key=lambda r: (r.last_name, r.first_name))
+
+    return Form1099RReport(
+        generated_at=datetime.now(timezone.utc),
+        parameters={"tax_year": tax_year},
+        summary=Form1099RSummary(
+            tax_year=tax_year,
+            recipient_count=len(rows),
+            total_gross_distributions=sum(r.gross_distributions for r in rows),
+            total_federal_withheld=sum(r.federal_tax_withheld for r in rows),
+            total_state_withheld=sum(r.state_tax_withheld for r in rows),
         ),
         rows=rows,
     )

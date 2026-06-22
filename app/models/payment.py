@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,38 @@ if TYPE_CHECKING:
     from app.models.beneficiary import Beneficiary, BeneficiaryBankAccount
     from app.models.member import Member
     from app.models.third_party_entity import ThirdPartyEntity
+
+
+class PaymentBatch(Base):
+    """Coordination primitive grouping payments for dispatch, reconciliation, and tax reporting."""
+
+    __tablename__ = "payment_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+
+    batch_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # annuity | refund | death_benefit | other
+    payment_type: Mapped[str] = mapped_column(String, nullable=False, default="annuity", server_default="annuity")
+    # draft | net_pay_applied | dispatched | reconciled
+    status: Mapped[str] = mapped_column(String, nullable=False, default="draft", server_default="draft")
+
+    # Computed at net_pay_applied; null in draft state
+    total_gross: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    total_net: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    payment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # json | webhook | nacha
+    dispatch_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    payments: Mapped[list[BenefitPayment]] = relationship(back_populates="batch")
+    events: Mapped[list[PaymentEvent]] = relationship(back_populates="batch")
 
 
 class BenefitPayment(Base):
@@ -58,6 +90,10 @@ class BenefitPayment(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payment_batches.id"), nullable=True
+    )
+
     member: Mapped[Member] = relationship(back_populates="payments")
     bank_account: Mapped[MemberBankAccount | None] = relationship(back_populates="payments")
     beneficiary: Mapped[Beneficiary | None] = relationship(foreign_keys=[beneficiary_id])
@@ -65,6 +101,8 @@ class BenefitPayment(Base):
         foreign_keys=[beneficiary_bank_account_id]
     )
     deductions: Mapped[list[PaymentDeduction]] = relationship(back_populates="payment")
+    batch: Mapped[PaymentBatch | None] = relationship(back_populates="payments")
+    events: Mapped[list[PaymentEvent]] = relationship(back_populates="payment")
 
 
 class PaymentDeduction(Base):
@@ -177,3 +215,35 @@ class TaxWithholdingElection(Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     member: Mapped[Member] = relationship(back_populates="tax_withholding_elections")
+
+
+class PaymentEvent(Base):
+    """Append-only accounting hook. Emitted at batch state transitions. Never UPDATE or DELETE."""
+
+    __tablename__ = "payment_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("payment_batches.id"), nullable=True
+    )
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("benefit_payments.id"), nullable=True
+    )
+    member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("members.id"), nullable=True
+    )
+
+    # batch_created | net_pay_applied | dispatched | reconciled | payment_reversed | payment_created
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    gl_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    # debit | credit
+    debit_credit: Mapped[str | None] = mapped_column(String, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    batch: Mapped[PaymentBatch | None] = relationship(back_populates="events", foreign_keys=[batch_id])
+    payment: Mapped[BenefitPayment | None] = relationship(back_populates="events", foreign_keys=[payment_id])

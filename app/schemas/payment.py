@@ -157,3 +157,57 @@ class PaymentRead(BaseModel):
 class PaymentStatusUpdate(BaseModel):
     status: Literal["pending", "issued", "held", "reversed", "cancelled"]
     note: str | None = None
+
+
+# ── Payment reversal ──────────────────────────────────────────────────────────
+
+class PaymentReverseRequest(BaseModel):
+    reason: str
+
+
+# ── Payment batch ─────────────────────────────────────────────────────────────
+
+class PaymentBatchCreate(BaseModel):
+    payment_ids: list[uuid.UUID]
+    batch_date: date
+    payment_type: Literal["annuity", "refund", "death_benefit", "other"] = "annuity"
+    note: str | None = None
+
+
+class PaymentBatchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    batch_date: date
+    payment_type: str
+    status: str
+    total_gross: Decimal | None
+    total_net: Decimal | None
+    payment_count: int | None
+    dispatch_format: str | None
+    dispatched_at: datetime | None
+    reconciled_at: datetime | None
+    note: str | None
+
+
+class DispatchRequest(BaseModel):
+    format: Literal["json", "webhook", "nacha"] = "json"
+    webhook_url: str | None = None
+
+
+# ── Payment event ─────────────────────────────────────────────────────────────
+
+class PaymentEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    batch_id: uuid.UUID | None
+    payment_id: uuid.UUID | None
+    member_id: uuid.UUID | None
+    event_type: str
+    amount: Decimal | None
+    gl_code: str | None
+    debit_credit: str | None
+    note: str | None

@@ -110,6 +110,9 @@ Tokens starting with `ofp_` → API key path; others → Keycloak JWT RS256.
 | Service purchase | `app/services/service_purchase_service.py` | Claims lifecycle; 4 types (military/ope/prior_service/refund); installment payments; config-driven credit routing |
 | Employer billing | `app/services/billing_service.py` | Contribution rates (specificity hierarchy); deficiency + supplemental invoices; rate variance warnings in payroll |
 | System config API | `app/api/v1/routers/system_config.py` | Read-only `GET /system-configurations`; all rows ordered by key + effective_date; `admin` scope |
+| Payment batch + dispatch | `app/services/batch_service.py` | Batch lifecycle: draft→net_pay_applied→dispatched→reconciled; JSON export; webhook POST; NACHA returns 501 |
+| Payment events (GL hooks) | `app/services/payment_events.py` | Append-only `payment_events` table; GL codes from `gl_code_mapping` config key; `GET /accounting/payment-events` |
+| 1099-R report | `app/services/report_service.py` | `get_1099r_data(tax_year)` → json/csv; pdf/pub1220 return 501; `GET /reports/1099r?tax_year=` |
 
 **Detailed architecture per module:** `docs/ARCHITECTURE.md`  
 **Backlog items:** `docs/BACKLOG.md`  
