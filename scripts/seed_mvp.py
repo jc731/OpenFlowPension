@@ -22,6 +22,7 @@ from app.models.leave import LeaveType
 from app.models.member import Member
 from app.models.address import MemberAddress
 from app.models.contact import MemberContact  # noqa: F401 — registers mapper
+from app.models.member_name_history import MemberNameHistory  # noqa: F401 — registers mapper
 from app.models.plan_config import PlanConfiguration, PlanTier, PlanType, SystemConfiguration
 from app.models.salary import SalaryHistory
 from app.models.service_credit import ServiceCreditEntry
